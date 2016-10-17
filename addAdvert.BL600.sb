@@ -1,0 +1,26 @@
+//BleAdvRptGetSpace.sb
+
+DIM rc, s$, dn$
+DIM ad$:ad$="00\01\02\03\04\05\06\07"
+DIM prAddr$:prAddr$=""
+DIM advRpt$, scnRpt$
+
+rc = BleScanRptInit(advRpt$)
+
+dn$ = BleGetDeviceName$()
+print "BleGetDeviceName$() : ";dn$
+
+//Add device name to scan Report
+// rc = BleAdvRptAppendAD(s$, 0x09, dn$)
+rc = BleAdvRptAppendAD(advRpt$,0x31,ad$)
+// print "\nrc for BleAdvRptAppendAD : ";rc
+
+rc = BleAdvRptsCommit(advRpt$,scnRpt$) 
+// print "\nrc for BleAdvRptsCommit(advRpt$,scnRpt$) : ";rc;"\n"
+
+print "\nFree space in advert report: ";BleAdvRptGetSpace(advRpt$);" bytes."
+print "\nFree space in scan report: ";BleAdvRptGetSpace(scnRpt$);" bytes."
+
+rc = BleAdvertStart(2,prAddr$, 100, 0,0)
+
+waitevent

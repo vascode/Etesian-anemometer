@@ -1,0 +1,147 @@
+//******************************************************************************
+// Definitions
+//******************************************************************************
+       
+	   //Set this to 0 to disable all debugging messages
+#define ENABLE_DEBUG_PRINTS                  1
+#define SPACE_IN_STABLE 					 10	// available space for scaned device at a time
+
+//******************************************************************************
+// Register Error Handler as early as possible
+//******************************************************************************
+sub HandlerOnErr()
+  if (ENABLE_DEBUG_PRINTS!=0) then
+    print "\n OnErr - ";GetLastError();"\n"
+  endif
+endsub
+onerror next HandlerOnErr
+
+//******************************************************************************
+// Debugging resource 
+//******************************************************************************
+
+sub DbgMsg(byval msg$ as string)
+  if (ENABLE_DEBUG_PRINTS!=0) then
+    print "\n";msg$
+  endif
+endsub
+
+//******************************************************************************
+// Global Variable Declarations
+//******************************************************************************
+ 
+dim rc
+dim scanTableMac[SPACE_IN_STABLE] AS STRING	// Table for scanned BLE devices Mac address
+dim scanTableData[SPACE_IN_STABLE] AS STRING	// Table for scanned data in BL600's advert
+dim scanTableRssi[SPACE_IN_STABLE] AS STRING	// Table for scanned BL600's RSSI
+
+
+dim arrIndex
+dim deviceMac
+
+//******************************************************************************
+// Initialisse Global Variable
+//******************************************************************************
+arrIndex = 0
+deviceMac = "01CC09A66FC16A"
+
+
+//******************************************************************************
+// Function and Subroutine definitions
+//******************************************************************************
+function InArray(byRef addr$ as string) as integer
+	dim i, rc
+	rc = 1	//if no matching address is found, return 1
+	
+	for i = 0 to SPACE_IN_STABLE - 1
+		if strCmp(scanTableMac[i], addr$) == 0 then
+			rc = 0 // found matching address -> return 0
+		endif
+	next 
+endfunc rc
+
+
+//==============================================================================
+// This function is called to show data => Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
+//==============================================================================
+function DisplayData(byval mac$ as string) as integer
+	dim i, tmpData, tmpData, comID, windSpd, sensorID, windDir
+	DbgMsg("\nDisplaying data")
+	for i = 0 to SPACE_IN_STABLE - 1
+		if strCmp(scanTableMac[i], mac$) == 0 then
+			tmpData = strhexize$(scanTableData[i])
+			//STRSPLITLEFT$ can be used to extract data
+			
+		exitfunc 0 //Success. Found matching MAC address
+			
+	next
+	
+
+endfunc 1
+
+//******************************************************************************
+// Handler definitions
+//******************************************************************************
+
+//==============================================================================
+// This handler is called when there is a scan attempt timeout
+//==============================================================================
+function HandlerBlrScanTimOut() as integer
+  DbgMsg( "\nScanning stopped via timeout" )
+  // Dispaly data if MAC address is matched
+  rc = DisplayData(deviceMac)
+endfunc 1
+
+//==============================================================================
+// This handler is called when there is an advert report waiting to be read
+//==============================================================================
+function HandlerAdvRpt() as integer
+  dim ad$,dta$,ndisc,rsi
+  
+  rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)  
+  while rc==0
+	if InArray(ad$) == 1 then
+		//need to check if arrIndex !> (SPACE_IN_STABLE -1) => if so, stop scanning
+		if arrIndex >= SPACE_IN_STABLE then
+			rc = BleScanStop()
+			if rc == 0 then
+				print "scan stopped due to lack of space in scanTableMac\n"
+				exitfunc 0
+			endif
+		else 		
+			scanTableMac[arrIndex] = ad$
+			scanTableData[arrIndex] = dta$
+			scanTableRssi[arrIndex] = rsi
+			arrIndex = arrIndex + 1
+			print "\nADV:";strhexize$(ad$);" ";strhexize$(dta$);" ";ndisc;" ";rsi		
+		endif
+	endif
+    rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)
+  endwhile
+endfunc 1
+
+//==============================================================================
+// This handler is called when there is a scan attempt timeout
+//==============================================================================
+function HandlerFastPaged() as integer
+  dim ad$,rsi
+  rc = BleScanGetPagerAddr(ad$,rsi)
+  if rc != 0 then
+    DbgMsg( "\nBleScanGetPagerAddr() failed " )
+  endif
+  print "\nFast Paged by : "; strhexize$(ad$); " rssi = ";rsi
+
+endfunc 1
+
+//******************************************************************************
+//******************************************************************************
+// Equivalent to main() in C
+//******************************************************************************
+
+OnEvent  EVBLE_SCAN_TIMEOUT       call HandlerBlrScanTimOut
+OnEvent  EVBLE_ADV_REPORT         call HandlerAdvRpt
+OnEvent  EVBLE_FAST_PAGED         call HandlerFastPaged
+
+rc = BleScanStart(1000, 0)
+
+waitevent 

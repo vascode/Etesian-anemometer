@@ -1,0 +1,276 @@
+'//******************************************************************************
+'// Laird Technologies (c) 2013
+'//
+'// ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+'// +++++ ++
+'// +++++ When UwTerminal downloads the app it will store it as a filenname ++
+'// +++++ which consists of all characters up to the first . and excluding it ++
+'// +++++ ++
+'// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+'//
+'// This application will send ADV_NONCONN_IND adverts that are populated with the
+'// Manufacturer Specific AD tag. The format of the Manufacturer Specific AD tag
+'// can be found in the 'Supplement to the Bluetooth Core Specification v6' or CSS v6.
+'//	I have included the format here for simplicity:
+'//	Manufacturer Specific AD ==> 2 octets or more, where first 2 octets are
+'//	the manufacturer's company identifier code as per the BT SIG
+'//	--> Must be a member to have an assigned code listed in the
+'//	'Assigned Numbers' section of the BT SIG website
+'//	--> This application uses Laird's Company ID = 0x0077
+'//
+'//	CUSTOMER SHOULD CHANGE/SEE ==>
+'//	The following values should be modified to test performance and change the behavior:
+'//	-- #define values can be changed as desired unless noted or unknown
+'//	-- Minimum: ADV_INTERVAL_MS, ADV_TIMEOUT_MS, ADV_SLEEP_MS
+'//	-- To add customer specific data rather than battery voltage (generic for
+'//	demo only), the function ReadBattery() can be removed or altered
+'//	so that it retrieves the data desired from the correct HW peripheral or
+'//	method. Also see the function BuildAdvRpt() to see where this data is
+'// added to the Advert packet and change anything required in the highlighted
+'//	section
+'//
+'//
+'// When saving this file, give it a filename which has the form xx.yyyyyy.sb
+'// where xx is a 1,2 or 3 letter mnemonic of the app so that you can launch it
+'// from UwTerminal with minimal typing and make yyyy as descriptive as you like
+'// as long as the total filename does not exceed the operating systems limit
+'//
+'//******************************************************************************
+
+'//******************************************************************************
+'// Definitions
+'//******************************************************************************
+'//version of this app in Device Info Service
+#define APP_VERSION "0.2" //Device Name Added to Adverts
+
+#define DEVICENAME	"Etesian"
+#define DEVICENAME_WRITABLE	0
+
+'//***Changed to Etesian Mar 28 2016 ***
+#define COMPANY_ID 0x0341
+
+#define MANF_NAME "Etesian Technologies"
+#define MODELSTR "Breeze-BT"
+#define SERIALNUM "12345"
+#define HWREV "1.0"
+
+'// These values will determine the time an advert session will be active and the time between
+'// subsequent advert events ==> 1 event = 3 adverts one each on the 3 advert channels, this will
+'// repeat at ADV_INTERVAL_MS until the ADV_TIMEOUT_MS expires
+
+#define ADV_INTERVAL_MS	100
+#define ADV_TIMEOUT_MS	350
+
+'// The function below is a timer that allows for power savings in this application
+'// Instead of Advertising ALL the time, this app will advertise for 1/2 second at 100ms
+'// intervals and then go into a Standby Doze current state for the time (ms) defined here
+
+#define ADV_SLEEP_MS	2000
+
+'//Set BLE Appearance to Unknown or 0 from BLE.sblib which will leave Appearance out of the Advert
+#define ADV_APPEARANCE	512 //GENERIC_TAG
+
+'//Will Device Name be present in Advert packet - NO
+#define MAX_DEVNAME_CHRS	0
+'//DiscoverableMode (2==General)
+#define DISCOVERY_MODE 2
+
+'//Advert packet type
+#define ADV_NONCONN_IND	3 //Non-Connectable, Broadcast
+
+'//Filter Policy
+#define ADV_FILTERPOLICY_ANY	0 //No White List enabled
+
+'//******************************************************************************
+'// Library Import
+'//******************************************************************************
+
+'//******************************************************************************
+'// Global Variable************************************************************************
+
+dim rc '//result code
+dim Tempr	         '// ch 4 a/d measurement
+dim windSpeed        '// ch 5 pulse counting
+dim WindDir          '// ch 6 a/d measurement
+dim Temprqr
+dim WindDirqr
+dim advFlags	'//Disoverability
+dim advType	'//Type of Advert - Non-Connectable, Broadcast
+dim advInt '//Adv interval in milliseconds
+dim advTmout '//Adv timeout in milliseconds
+dim advFilPol '//Adv filter policy - see ADV_FILTERPOLICY_xxx in blelib.sblib
+dim adRpt$ as string '//contains the most recent Advertise report
+dim scRpt$ as string '//contains the most recent scan report--Needed for command but N/A to this app
+dim devnme$ as string '//holds base device name "Etesian"
+dim lasttick		'//will hold the initial or last tick count
+dim timems[8]    	'//will hold the time elapsed since last tick
+dim time			'//will hold the average time over 8 pulses
+dim hz				'//will hold the reciprocol of the average time over 8 pulses
+dim pulsecnt		'//Pulse Counter
+
+pulsecnt=0 			'//Set pulsecnt == 0 to start
+time=0				'//Set initial time value == 0 to start
+hz=0				'//Set initial hz reading == 0 anem not "on the air yet"
+
+advFlags= DISCOVERY_MODE
+advType=ADV_NONCONN_IND
+advInt=ADV_INTERVAL_MS
+advTmout=ADV_TIMEOUT_MS
+advFilPol=ADV_FILTERPOLICY_ANY
+
+
+'//******************************************************************************
+'// Function and Subroutine definitions
+'//******************************************************************************
+
+function BuildDevName() as integer
+	dim MAC$ '//will hold full MAC address
+	dim LSBMAC$ '//will hold the 3 LSB's of MAC address
+	dim F$, M$, L$ '//First Middle and Last LSB
+	devnme$=DEVICENAME
+	MAC$ = sysinfo$(14) // public random address
+	LSBMAC$ = Right$(MAC$,3)
+endfunc 1
+	
+function ReadCh4() as integer
+   dim milliv    '// answer in millivolts
+   milliv=GpioRead(4)
+endfunc(milliv/1)
+
+function ReadCh6() as integer
+   dim mv '// answer in millivolts
+   mv=GpioRead(6)
+endfunc(mv/1)
+
+sub BuildAdvRpt()
+	dim manfstr$, addr$, windSpeed$, windDir$, Tempr$, sensorID$
+	dim size
+	adRpt$=""
+	scRpt$=""
+	addr$=""
+	
+'// **************************************************************************************
+'//	CHANGE THE FOLLOWING THREE LINES OF CODE + THE ReadBattery() FUNCTION TO ADD CUSTOM DATA
+'// **************************************************************************************
+'//  just like the 900 MHz version we need sensor ID numbers
+'// the phone gets the ASCII i.e. "A5" is received as 4135, "00" is 3030
+'// these will be our serial number/ID number to be entered in the app
+'// a-z + A-Z + 0-9  62^2 combinations = 3844 possible unique.
+
+'// ********************DON'T FORGET TO SET THE ID ******************
+     
+     sensorID$ = "  "
+     
+'// ********************DON'T FORGET TO SET THE ID ******************8
+
+'// ********* MEASURE TEMPERATURE, WIND SPEED AND WIND DIRECTION, INCLUDE IN ADVERT ******************	
+	
+	manfstr$ = ""
+'// adc is set for 1:1 scaling of the input signal
+'// temperature raw result divided by 4 to scale to 8 bit without overflow
+'// tmp36 temperature sensor is 70 deg c (158 f) at 1.2 volts ie full scale	
+	
+	rc=GpioSetFunc(4,3,0x11)	// temperature sensor is set to ANALOG_IN with 10-bit ADC
+	Tempr=ReadCh4()
+    Temprqr = Tempr/4
+
+	rc=BleEncode8(Tempr$,Temprqr,0)
+	rc=BleEncode16(manfstr$,COMPANY_ID,0)
+	manfstr$=manfstr$ + Tempr$
+
+	windSpeed=hz
+	
+	rc=BleEncode8(windSpeed$,windSpeed,0)
+	manfstr$ = manfstr$ + windSpeed$
+	
+'// adc is set for 1:1 scaling of the input signal
+'// wind direction raw result divided by 4 to scale to 8 bit without overflow
+'// wind direction sensor is 360 degrees at 1.2 volts ie full scale
+'// This is the GPIO for the wind vane potentiometer excitation voltage
+    rc=gpiosetfunc(8,2,0) '// sio 8, DIGITAL_OUT, initial output low	
+'// turn on excitation voltage
+    gpiowrite(8,1)
+'// The Vreg takes about 3 ms to stabilize, so we have to delay
+    dim starttick, elapsed   '// tick functions return milliseconds
+    starttick = gettickcount()
+    Do
+      elapsed = getticksince(starttick)
+    Until elapsed > 3   
+	rc=GpioSetFunc(6,3,0x11)	'// wind direction, sio6, ANALOG_IN, 10bit ADC
+	WindDir=ReadCh6()
+	gpiowrite(8,0)
+	WindDirqr = WindDir/4
+	
+	rc=BleEncode8(windDir$,windDirqr,0)
+	manfstr$ = manfstr$ + sensorID$  + windDir$
+	
+	
+
+'// ***************************************************************************************
+'// *************  create a advertise report **********************************************
+	rc=BleAdvRptInit(adRpt$,advFlags,ADV_APPEARANCE,MAX_DEVNAME_CHRS)
+	size=BleAdvRptGetSpace(adRpt$)
+	rc=BuildDevName()
+	rc=BleAdvRptAppendAD(adRpt$,0x09,devnme$)
+	rc=BleAdvRptAppendAD(adRpt$,0xFF,manfstr$)
+	rc = BleAdvRptsCommit(adRpt$,scRpt$)
+	rc=BleAdvertStart(advType,addr$,advInt,advTmout,advFilPol)
+ endsub
+
+function HndlrReBuildAdv() as integer
+    BuildAdvRpt()
+endfunc 1
+
+'//******************************************************************************
+'// Handler definitions
+'//******************************************************************************
+function HndlrBleAdvTmt()
+   TimerStart(0,ADV_SLEEP_MS,0)
+endfunc 1
+
+'// ** Handler for Gpio5 which is triggered by AC generator pulses
+
+function HndlrGpioChan0()   '// I added the paren () 'cause compiler complained ??
+	dim tick1 '//Holds initial tick count immediately after pulse triggers event
+	tick1 = GetTickCount() '//tick count immediately after event is triggered
+	timems[pulsecnt]=GetTickSince(lasttick)	'//Time elapsed since last tick stored as array
+	lasttick=tick1 	'//New tick value
+	pulsecnt=pulsecnt+1
+	if pulsecnt == 7 then						'//If we've seen 7 pulses we need to average them and get the frequency value
+		do 
+			time=time+timems[pulsecnt-1]		'//Add up the total time for 7 pulses
+			pulsecnt=pulsecnt-1					'//decrement the pulsecnt
+		until pulsecnt==0						'//pulsecnt == 0 which we want for the next pass into this function
+		time=time/7								'//Get the average pulse time over the last 7 pulses
+		time = min (time, 323)					'/ prevent overflow when anem is not turning 323 = 5 mph)
+		hz=((1000*8684)/3874)/time              '// have to start with Hz x 1000, Convert the average to a frequency reading
+		time=0 									'//Set time back to zero for next run
+	endif
+endfunc 1
+
+'//******************************************************************************
+'// Equivalent to main() in C
+'//******************************************************************************
+OnEvent EvBle_Adv_Timeout 	Call 	HndlrBleAdvTmt
+OnEvent EvTmr0				Call	HndlrReBuildAdv
+OnEvent EvDetectChan0		Call	HndlrGpioChan0
+
+'// ** Very first thing to do is get tick count
+        lasttick=GetTickCount()
+'// ** Leaving this one because you'll re-enable it later and if using the DVK it's dip switch is closed
+        rc=gpiosetfunc(4,2,0) '// Disables the temperature sensor
+        uartclose() '// Closes the UART
+'// **This is the GPIO for the Hall Effect switch, if you need to change it you can
+        rc=gpiosetfunc(5,1,0)	'//Gpio5 as Digital_IN with no pull using generator active rect out for pulses
+        rc=gpioassignevent(0,5,1) '//Assign event to High to LOW transition of Gpio5
+        
+
+'//------------------------------------------------------------------------------
+'// Wait for a synchronous event.
+'// An application can have multiple <WaitEvent> statements
+'//------------------------------------------------------------------------------'
+BuildAdvRpt()
+waitevent
+
+
+
