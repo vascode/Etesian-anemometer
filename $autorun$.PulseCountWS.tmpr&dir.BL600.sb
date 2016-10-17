@@ -203,6 +203,7 @@ sub BuildAdvRpt()
 	
 	rc=BleEncode8(windDir$,windDirqr,0)
 	manfstr$ = manfstr$ + sensorID$  + windDir$
+	// print "manfstr$: ";manfstr$
 	
 	
 

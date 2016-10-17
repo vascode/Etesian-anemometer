@@ -31,53 +31,63 @@ endsub
 //******************************************************************************
  
 dim rc
-dim scanTableMac[SPACE_IN_STABLE] AS STRING	// Table for scanned BLE devices Mac address
+dim scanTableMac[SPACE_IN_STABLE] AS STRING	// Table for scanned BLE devices Mac address (database)
 dim scanTableData[SPACE_IN_STABLE] AS STRING	// Table for scanned data in BL600's advert
-dim scanTableRssi[SPACE_IN_STABLE] AS STRING	// Table for scanned BL600's RSSI
+dim scanTableRssi[SPACE_IN_STABLE] AS INTEGER	// Table for scanned BL600's RSSI
 
 
 dim arrIndex
-dim deviceMac
+dim deviceMac$
 
 //******************************************************************************
 // Initialisse Global Variable
 //******************************************************************************
 arrIndex = 0
-deviceMac = "01CC09A66FC16A"
+deviceMac$ = "01CC09A66FC16A"
 
 
 //******************************************************************************
 // Function and Subroutine definitions
 //******************************************************************************
 function InArray(byRef addr$ as string) as integer
-	dim i, rc
-	rc = 1	//if no matching address is found, return 1
+	dim i, rc2, hexAddr$
+	rc2 = 1	//if no matching address is found, return 1
+	hexAddr$ = strhexize$(addr$)	//strhexize the addr$ to compare with one in scanTableMac[]	
 	
-	for i = 0 to SPACE_IN_STABLE - 1
-		if strCmp(scanTableMac[i], addr$) == 0 then
-			rc = 0 // found matching address -> return 0
+	for i = 0 to SPACE_IN_STABLE - 1		
+		if strCmp(scanTableMac[i], hexAddr$) == 0 then
+			exitfunc 0 // rc2 = 0 // Success! found matching address -> return 0
 		endif
 	next 
-endfunc rc
+endfunc rc2
 
 
 //==============================================================================
 // This function is called to show data => Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
 //==============================================================================
 function DisplayData(byval mac$ as string) as integer
-	dim i, tmpData, tmpData, comID, windSpd, sensorID, windDir
-	DbgMsg("\nDisplaying data")
+	dim i, comID, windSpd, sensorID, windDir, emptyStr$
+	emptyStr$ =""
+	DbgMsg("\nDisplaying data\n")
 	for i = 0 to SPACE_IN_STABLE - 1
+		
+		//If find corresponding MAC address in database
 		if strCmp(scanTableMac[i], mac$) == 0 then
-			tmpData = strhexize$(scanTableData[i])
+			
 			//STRSPLITLEFT$ can be used to extract data
+			print "addr: ";scanTableMac[i];" Data : ";scanTableData[i];" RSSI: ";scanTableRssi[i];
 			
-		exitfunc 0 //Success. Found matching MAC address
-			
+			exitfunc 0 //Success. Found matching MAC address
+		
+		// If reached the end of array. Failed to find matching MAC address.	
+		elseif strCmp(scanTableMac[i],emptyStr$) == 0 then
+			exitfunc 1  
+		endif
+		
 	next
 	
 
-endfunc 1
+endfunc 1	//Failed to find matching addr
 
 //******************************************************************************
 // Handler definitions
@@ -89,7 +99,7 @@ endfunc 1
 function HandlerBlrScanTimOut() as integer
   DbgMsg( "\nScanning stopped via timeout" )
   // Dispaly data if MAC address is matched
-  rc = DisplayData(deviceMac)
+  rc = DisplayData(deviceMac$)
 endfunc 1
 
 //==============================================================================
@@ -109,11 +119,12 @@ function HandlerAdvRpt() as integer
 				exitfunc 0
 			endif
 		else 		
-			scanTableMac[arrIndex] = ad$
-			scanTableData[arrIndex] = dta$
-			scanTableRssi[arrIndex] = rsi
-			arrIndex = arrIndex + 1
 			print "\nADV:";strhexize$(ad$);" ";strhexize$(dta$);" ";ndisc;" ";rsi		
+			//This will be replaced so that only intended device info is stored
+			scanTableMac[arrIndex] = strhexize$(ad$)
+			scanTableData[arrIndex] = strhexize$(dta$)
+			scanTableRssi[arrIndex] = rsi
+			arrIndex = arrIndex + 1			
 		endif
 	endif
     rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)

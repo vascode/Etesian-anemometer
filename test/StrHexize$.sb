@@ -1,0 +1,9 @@
+//Example :: StrHexize$.sb (See in Firmware Zip file) 
+DIM s$,t$ 
+s$="Laird" 
+PRINT s$;"\n" 
+t$=StrHexize$(s$) 
+PRINT StrLen(s$);"\n" 
+PRINT t$;"\n" 
+PRINT StrLen(t$);"\n" 
+PRINT s$;"\n"

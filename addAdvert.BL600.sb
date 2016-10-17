@@ -1,9 +1,15 @@
 //BleAdvRptGetSpace.sb
 
+#define DEVICENAME	"Etesian"
+
 DIM rc, s$, dn$
-DIM ad$:ad$="00\01\02\03\04\05\06\07"
+// DIM ad$:ad$="00\01\02\03\04\05\06\07"
+DIM ad$:ad$="11\02\03"
 DIM prAddr$:prAddr$=""
 DIM advRpt$, scnRpt$
+dim devnme$ as string '//holds base device name "Etesian"
+
+devnme$=DEVICENAME
 
 rc = BleScanRptInit(advRpt$)
 
@@ -12,7 +18,8 @@ print "BleGetDeviceName$() : ";dn$
 
 //Add device name to scan Report
 // rc = BleAdvRptAppendAD(s$, 0x09, dn$)
-rc = BleAdvRptAppendAD(advRpt$,0x31,ad$)
+// rc=BleAdvRptAppendAD(advRpt$,0x09,devnme$)
+rc = BleAdvRptAppendAD(advRpt$,0xFF,ad$)
 // print "\nrc for BleAdvRptAppendAD : ";rc
 
 rc = BleAdvRptsCommit(advRpt$,scnRpt$) 

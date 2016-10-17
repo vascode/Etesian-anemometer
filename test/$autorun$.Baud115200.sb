@@ -1,0 +1,6 @@
+dim rc
+sub SetUart()
+	uartclose()
+	rc=uartopen(115200,0,0, "CN81H")
+endsub
+SetUart()
