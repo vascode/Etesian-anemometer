@@ -31,13 +31,15 @@ endsub
 //******************************************************************************
  
 dim rc
-dim scanTableMac[SPACE_IN_STABLE] AS STRING	// Table for scanned BLE devices Mac address (database)
+dim scanTableMac[SPACE_IN_STABLE] AS STRING		// Table for scanned BLE devices Mac address (database)
 dim scanTableData[SPACE_IN_STABLE] AS STRING	// Table for scanned data in BL600's advert
 dim scanTableRssi[SPACE_IN_STABLE] AS INTEGER	// Table for scanned BL600's RSSI
 
 
-dim arrIndex
-dim deviceMac$
+dim arrIndex	//Index for scan array
+
+//This should be gone as we will look for device name instead of mac
+dim deviceMac$	//Mac address for intended device
 
 //******************************************************************************
 // Initialisse Global Variable
@@ -77,6 +79,7 @@ function DisplayData(byval mac$ as string) as integer
 			//STRSPLITLEFT$ can be used to extract data
 			print "addr: ";scanTableMac[i];" Data : ";scanTableData[i];" RSSI: ";scanTableRssi[i];
 			
+			
 			exitfunc 0 //Success. Found matching MAC address
 		
 		// If reached the end of array. Failed to find matching MAC address.	
@@ -106,18 +109,25 @@ endfunc 1
 // This handler is called when there is an advert report waiting to be read
 //==============================================================================
 function HandlerAdvRpt() as integer
-  dim ad$,dta$,ndisc,rsi
+  dim ad$, dta$, ndisc, rsi, i
   
   rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)  
   while rc==0
 	if InArray(ad$) == 1 then
-		//need to check if arrIndex !> (SPACE_IN_STABLE -1) => if so, stop scanning
+		// If scan array is completed filled, reset the array
 		if arrIndex >= SPACE_IN_STABLE then
-			rc = BleScanStop()
-			if rc == 0 then
-				print "scan stopped due to lack of space in scanTableMac\n"
-				exitfunc 0
-			endif
+			for i = 0 to SPACE_IN_STABLE
+				DbgMsg ("\nReset the scan array")
+				scanTableMac[i] = ""
+				scanTableData[i] = ""
+				scanTableRssi[i] = 0
+			next	
+			
+			// rc = BleScanStop()
+			// if rc == 0 then
+				// print "scan stopped due to lack of space in scanTableMac\n"
+				// exitfunc 0
+			// endif
 		else 		
 			print "\nADV:";strhexize$(ad$);" ";strhexize$(dta$);" ";ndisc;" ";rsi		
 			//This will be replaced so that only intended device info is stored
