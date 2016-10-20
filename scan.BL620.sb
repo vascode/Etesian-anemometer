@@ -37,6 +37,7 @@ dim scanTableRssi[SPACE_IN_STABLE] AS INTEGER	// Table for scanned BL600's RSSI
 
 
 dim arrIndex	//Index for scan array
+dim preAdvCount	// The number of devices in scan array
 
 //This should be gone as we will look for device name instead of mac
 dim deviceMac$	//Mac address for intended device
@@ -46,7 +47,7 @@ dim deviceMac$	//Mac address for intended device
 //******************************************************************************
 arrIndex = 0
 deviceMac$ = "01CC09A66FC16A"
-
+preAdvCount = 0 
 
 //******************************************************************************
 // Function and Subroutine definitions
@@ -56,7 +57,8 @@ function InArray(byRef addr$ as string) as integer
 	rc2 = 1	//if no matching address is found, return 1
 	hexAddr$ = strhexize$(addr$)	//strhexize the addr$ to compare with one in scanTableMac[]	
 	
-	for i = 0 to SPACE_IN_STABLE - 1		
+	// for i = 0 to SPACE_IN_STABLE - 1
+	for i = 0 to arrIndex
 		if strCmp(scanTableMac[i], hexAddr$) == 0 then
 			exitfunc 0 // rc2 = 0 // Success! found matching address -> return 0
 		endif
@@ -109,32 +111,30 @@ endfunc 1
 // This handler is called when there is an advert report waiting to be read
 //==============================================================================
 function HandlerAdvRpt() as integer
-  dim ad$, dta$, ndisc, rsi, i
+  dim ad$, dta$, ndisc, rsi
   
   rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)  
   while rc==0
+	// Run below if the device was not scanned before
 	if InArray(ad$) == 1 then
 		// If scan array is completed filled, reset the array
 		if arrIndex >= SPACE_IN_STABLE then
-			for i = 0 to SPACE_IN_STABLE
+			for arrIndex = 0 to SPACE_IN_STABLE
 				DbgMsg ("\nReset the scan array")
-				scanTableMac[i] = ""
-				scanTableData[i] = ""
-				scanTableRssi[i] = 0
-			next	
-			
-			// rc = BleScanStop()
-			// if rc == 0 then
-				// print "scan stopped due to lack of space in scanTableMac\n"
-				// exitfunc 0
-			// endif
+				scanTableMac[arrIndex] = ""
+				scanTableData[arrIndex] = ""
+				scanTableRssi[arrIndex] = 0
+			next
+			arrIndex = 0
+		
+		// Add scanned device to scan array
 		else 		
 			print "\nADV:";strhexize$(ad$);" ";strhexize$(dta$);" ";ndisc;" ";rsi		
 			//This will be replaced so that only intended device info is stored
 			scanTableMac[arrIndex] = strhexize$(ad$)
 			scanTableData[arrIndex] = strhexize$(dta$)
 			scanTableRssi[arrIndex] = rsi
-			arrIndex = arrIndex + 1			
+			arrIndex = arrIndex + 1				
 		endif
 	endif
     rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)
