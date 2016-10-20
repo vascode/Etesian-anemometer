@@ -3,8 +3,9 @@
 //******************************************************************************
        
 	   //Set this to 0 to disable all debugging messages
-#define ENABLE_DEBUG_PRINTS                  1
-#define SPACE_IN_STABLE 					 10	// available space for scaned device at a time
+#define ENABLE_DEBUG_PRINTS			1
+#define SPACE_IN_SCAN_TABLE			10	// available space for scaned device at a time
+#define DEVICENAME					"Etesian"
 
 //******************************************************************************
 // Register Error Handler as early as possible
@@ -29,70 +30,96 @@ endsub
 //******************************************************************************
 // Global Variable Declarations
 //******************************************************************************
- 
+
 dim rc
-dim scanTableMac[SPACE_IN_STABLE] AS STRING		// Table for scanned BLE devices Mac address (database)
-dim scanTableData[SPACE_IN_STABLE] AS STRING	// Table for scanned data in BL600's advert
-dim scanTableRssi[SPACE_IN_STABLE] AS INTEGER	// Table for scanned BL600's RSSI
-
-
-dim arrIndex	//Index for scan array
-dim preAdvCount	// The number of devices in scan array
-
-//This should be gone as we will look for device name instead of mac
-dim deviceMac$	//Mac address for intended device
+dim scanTableMac[SPACE_IN_SCAN_TABLE] as string		// Table for scanned BLE devices Mac address (database)
+dim arrIndex as integer		// Index for scan array
 
 //******************************************************************************
 // Initialisse Global Variable
 //******************************************************************************
 arrIndex = 0
-deviceMac$ = "01CC09A66FC16A"
-preAdvCount = 0 
 
 //******************************************************************************
 // Function and Subroutine definitions
 //******************************************************************************
+
+//==============================================================================
+// Check to see via addr$ if device has been scanned
+//==============================================================================
 function InArray(byRef addr$ as string) as integer
-	dim i, rc2, hexAddr$
-	rc2 = 1	//if no matching address is found, return 1
+	dim i, hexAddr$
 	hexAddr$ = strhexize$(addr$)	//strhexize the addr$ to compare with one in scanTableMac[]	
 	
-	// for i = 0 to SPACE_IN_STABLE - 1
 	for i = 0 to arrIndex
 		if strCmp(scanTableMac[i], hexAddr$) == 0 then
-			exitfunc 0 // rc2 = 0 // Success! found matching address -> return 0
+			// Success! found matching address -> return 0
+			exitfunc 0 
 		endif
 	next 
-endfunc rc2
+endfunc 1 //no matching address is found, return 2
 
+//==============================================================================
+// Get device name
+//==============================================================================
+function getDeviceName(byval data$ as string) as string
+	dim devName$ as string	// Device name
+	
+	// Get device name via data type 0x08
+	rc = BLEGETADBYTAG(data$, 8, devName$)
+	if (rc != 0) then
+		// Name not found at index 0x08, check 0x09
+		rc = BLEGETADBYTAG(data$, 9, devName$)
+	endif
+endfunc devName$
+
+//==============================================================================
+//This function removes leading 0s from the front of a string
+//==============================================================================
+FUNCTION removeZeros(data$) AS STRING
+	dim i, Done, tmpStr$ : i = 0 : Done = 0
+	WHILE (i < strlen(data$))
+		tmpStr$ = MID$(data$, i, 1)
+		IF (STRCMP(tmpStr$, "0") != 0) THEN
+			//Other number found - cut string to this length and mark as finished
+			tmpStr$ = RIGHT$(data$, strlen(data$)-i)
+			i = strlen(data$)
+			Done = 1
+		ENDIF
+		i = i+1
+	ENDWHILE
+
+	IF (Done == 0) THEN
+		//Other number not found in provided string
+		tmpStr$ = "0"
+	ENDIF
+ENDFUNC tmpStr$
 
 //==============================================================================
 // This function is called to show data => Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
+// This needs to be gone as I will display data in HandlerAdvRpt
 //==============================================================================
-function DisplayData(byval mac$ as string) as integer
-	dim i, comID, windSpd, sensorID, windDir, emptyStr$
-	emptyStr$ =""
-	DbgMsg("\nDisplaying data\n")
-	for i = 0 to SPACE_IN_STABLE - 1
-		
-		//If find corresponding MAC address in database
-		if strCmp(scanTableMac[i], mac$) == 0 then
-			
-			//STRSPLITLEFT$ can be used to extract data
-			print "addr: ";scanTableMac[i];" Data : ";scanTableData[i];" RSSI: ";scanTableRssi[i];
-			
-			
-			exitfunc 0 //Success. Found matching MAC address
-		
-		// If reached the end of array. Failed to find matching MAC address.	
-		elseif strCmp(scanTableMac[i],emptyStr$) == 0 then
-			exitfunc 1  
-		endif
-		
-	next
+function showAdvData(byval data$ as string) as integer
+	dim tmpVal, tmpStr$, tmpStr2$
+	tmpVal = 0
 	
-
-endfunc 1	//Failed to find matching addr
+	print "Advertising data [hex]:\n"
+	while (tmpVal <= 0xff) 
+		if (tmpVal == 8) then
+			// Skip name tags
+			tmpVal = 10
+		endif
+		rc = BLEGETADBYTAG(data$, tmpVal, tmpStr$)
+		if (rc == 0) then
+			// Output tag
+			tmpStr2$ = ""
+			SPRINT #tmpStr2$,INTEGER.H'tmpVal
+			tmpStr2$ = removeZeros(tmpStr2$)
+			PRINT "  Length: ";strlen(tmpStr$);", Type: 0x";tmpStr2$;", Value: ";STRHEXIZE$(tmpStr$);"\n"
+		endif
+		tmpVal = tmpVal+1
+	endwhile	
+endfunc 0
 
 //******************************************************************************
 // Handler definitions
@@ -103,55 +130,38 @@ endfunc 1	//Failed to find matching addr
 //==============================================================================
 function HandlerBlrScanTimOut() as integer
   DbgMsg( "\nScanning stopped via timeout" )
-  // Dispaly data if MAC address is matched
-  rc = DisplayData(deviceMac$)
-endfunc 1
+endfunc 0
 
 //==============================================================================
 // This handler is called when there is an advert report waiting to be read
 //==============================================================================
 function HandlerAdvRpt() as integer
-  dim ad$, dta$, ndisc, rsi
+  dim ad$, dta$, ndisc, rsi, dName$
   
   rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)  
   while rc==0
-	// Run below if the device was not scanned before
-	if InArray(ad$) == 1 then
-		// If scan array is completed filled, reset the array
-		if arrIndex >= SPACE_IN_STABLE then
-			for arrIndex = 0 to SPACE_IN_STABLE
+	// Check if device name is DEVICENAME ("Etesian") && check if the device was not scanned before
+	dName$ = getDeviceName(dta$)
+	if strCmp(dName$, DEVICENAME) == 0 && InArray(ad$) == 1 then		
+		// If can array is all filled with Etesian devices, reset the array
+		if arrIndex >= SPACE_IN_SCAN_TABLE then
+			for arrIndex = 0 to SPACE_IN_SCAN_TABLE
 				DbgMsg ("\nReset the scan array")
 				scanTableMac[arrIndex] = ""
-				scanTableData[arrIndex] = ""
-				scanTableRssi[arrIndex] = 0
 			next
-			arrIndex = 0
-		
-		// Add scanned device to scan array
+			arrIndex = 0			
 		else 		
-			print "\nADV:";strhexize$(ad$);" ";strhexize$(dta$);" ";ndisc;" ";rsi		
-			//This will be replaced so that only intended device info is stored
+			//Show advert data
+			print dName$;" (";strhexize$(ad$);")	RSSI: ";rsi;"\n"
+			rc = showAdvData(dta$)
+
+			// Add scanned device to scan array
 			scanTableMac[arrIndex] = strhexize$(ad$)
-			scanTableData[arrIndex] = strhexize$(dta$)
-			scanTableRssi[arrIndex] = rsi
-			arrIndex = arrIndex + 1				
-		endif
-	endif
+			arrIndex = arrIndex + 1
+		endif		
+	endif 
     rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)
   endwhile
-endfunc 1
-
-//==============================================================================
-// This handler is called when there is a scan attempt timeout
-//==============================================================================
-function HandlerFastPaged() as integer
-  dim ad$,rsi
-  rc = BleScanGetPagerAddr(ad$,rsi)
-  if rc != 0 then
-    DbgMsg( "\nBleScanGetPagerAddr() failed " )
-  endif
-  print "\nFast Paged by : "; strhexize$(ad$); " rssi = ";rsi
-
 endfunc 1
 
 //******************************************************************************
@@ -161,7 +171,6 @@ endfunc 1
 
 OnEvent  EVBLE_SCAN_TIMEOUT       call HandlerBlrScanTimOut
 OnEvent  EVBLE_ADV_REPORT         call HandlerAdvRpt
-OnEvent  EVBLE_FAST_PAGED         call HandlerFastPaged
 
 rc = BleScanStart(3000, 0)
 
