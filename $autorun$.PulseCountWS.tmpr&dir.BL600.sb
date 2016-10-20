@@ -205,8 +205,6 @@ sub BuildAdvRpt()
 	manfstr$ = manfstr$ + sensorID$  + windDir$
 	// print "manfstr$: ";manfstr$
 	
-	
-
 '// ***************************************************************************************
 '// *************  create a advertise report **********************************************
 	rc=BleAdvRptInit(adRpt$,advFlags,ADV_APPEARANCE,MAX_DEVNAME_CHRS)

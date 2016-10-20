@@ -153,6 +153,6 @@ OnEvent  EVBLE_SCAN_TIMEOUT       call HandlerBlrScanTimOut
 OnEvent  EVBLE_ADV_REPORT         call HandlerAdvRpt
 OnEvent  EVBLE_FAST_PAGED         call HandlerFastPaged
 
-rc = BleScanStart(1000, 0)
+rc = BleScanStart(3000, 0)
 
 waitevent 

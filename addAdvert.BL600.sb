@@ -1,32 +1,31 @@
 //BleAdvRptGetSpace.sb
 
 #define DEVICENAME	"Etesian"
+#define ADV_APPEARANCE	512 	//GENERIC_TAG
+#define MAX_DEVNAME_CHRS	0 	'//Will Device Name be present in Advert packet - NO
+#define DISCOVERY_MODE 2 '		//DiscoverableMode (2==General)
 
-DIM rc, s$, dn$
-// DIM ad$:ad$="00\01\02\03\04\05\06\07"
-DIM ad$:ad$="11\02\03"
-DIM prAddr$:prAddr$=""
-DIM advRpt$, scnRpt$
+dim advFlags	'//Disoverability
+dim rc, s$, dn$
+// dim ad$:ad$="00\01\02\03\04\05\06\07"
+dim ad$:ad$="11\02\03"
+dim prAddr$:prAddr$=""
+dim advRpt$, scnRpt$
 dim devnme$ as string '//holds base device name "Etesian"
 
 devnme$=DEVICENAME
+advFlags= DISCOVERY_MODE
 
-rc = BleScanRptInit(advRpt$)
+'// ***************************************************************************************
+'// *************  create a advertise report **********************************************
+// rc = BleScanRptInit(advRpt$)
+rc=BleAdvRptInit(advRpt$,advFlags,ADV_APPEARANCE,MAX_DEVNAME_CHRS)
 
-dn$ = BleGetDeviceName$()
-print "BleGetDeviceName$() : ";dn$
-
-//Add device name to scan Report
-// rc = BleAdvRptAppendAD(s$, 0x09, dn$)
-// rc=BleAdvRptAppendAD(advRpt$,0x09,devnme$)
+//Add device name and data to scan Report
+rc=BleAdvRptAppendAD(advRpt$,0x09,devnme$)
 rc = BleAdvRptAppendAD(advRpt$,0xFF,ad$)
-// print "\nrc for BleAdvRptAppendAD : ";rc
 
 rc = BleAdvRptsCommit(advRpt$,scnRpt$) 
-// print "\nrc for BleAdvRptsCommit(advRpt$,scnRpt$) : ";rc;"\n"
-
-print "\nFree space in advert report: ";BleAdvRptGetSpace(advRpt$);" bytes."
-print "\nFree space in scan report: ";BleAdvRptGetSpace(scnRpt$);" bytes."
 
 rc = BleAdvertStart(2,prAddr$, 100, 0,0)
 

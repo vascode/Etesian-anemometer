@@ -1,0 +1,21 @@
+! Calculate direction
+dirCounts = msdecd+lsdecd
+dirDegrees = dirCounts / 255 * 360
+IF dirDegrees > 359 Then dirDegrees = 359
+IF dirDegrees < 0 Then dirDegrees = 0
+dirDegrees$ = STR(INT(dirDegrees+0.5))
+! print dirDegrees$
+
+
+! Calculate temperature
+volts=1.2*((msdect+lsdect)/255)
+degC=100*volts-50
+degF=degC*9/5+32
+degF$ = STR(INT(degF+0.5))
+
+! Calculate wind speed in mph
+counts=msdec+lsdec
+IF counts > 0 THEN
+ws_mph=0.3874*counts+2.34
+ELSE
+ws_mph = 0
