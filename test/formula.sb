@@ -1,0 +1,15 @@
+dim T, S, D, tmpT, tmpS, tmpD, rc
+
+tmpT = 0x99
+tmpS = 19
+tmpD = 128
+
+
+print "tmpT in hex: ";integer.h' tmpT;"\n"
+print "tmpT in decimal: ";integer.d' tmpT;"\n"
+print "tmpT in binary: ";integer.b' tmpT;"\n"
+
+T = tmpT * 867 - 59392
+
+S = 0
+D = 0

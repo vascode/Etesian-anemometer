@@ -6,7 +6,7 @@
 #define ENABLE_DEBUG_PRINTS			1
 #define SPACE_IN_SCAN_TABLE			10	// available space for scaned device at a time
 #define DEVICENAME					"Etesian"
-
+#define SCAN_SLEEP_MS	2000	// Need to be used for timer
 //******************************************************************************
 // Register Error Handler as early as possible
 //******************************************************************************
@@ -96,11 +96,11 @@ FUNCTION removeZeros(data$) AS STRING
 ENDFUNC tmpStr$
 
 //==============================================================================
-// This function is called to show data => Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
-// This needs to be gone as I will display data in HandlerAdvRpt
+// Show Advert Data according to data type
 //==============================================================================
 function showAdvData(byval data$ as string) as integer
 	dim tmpVal, tmpStr$, tmpStr2$
+
 	tmpVal = 0
 	
 	print "Advertising data [hex]:\n"
@@ -115,11 +115,56 @@ function showAdvData(byval data$ as string) as integer
 			tmpStr2$ = ""
 			SPRINT #tmpStr2$,INTEGER.H'tmpVal
 			tmpStr2$ = removeZeros(tmpStr2$)
-			PRINT "  Length: ";strlen(tmpStr$);", Type: 0x";tmpStr2$;", Value: ";STRHEXIZE$(tmpStr$);"\n"
+			PRINT "  Length: ";strlen(tmpStr$);", Type: 0x";tmpStr2$;", Value: ";STRHEXIZE$(tmpStr$);"\n"			
 		endif
 		tmpVal = tmpVal+1
-	endwhile	
+	endwhile
 endfunc 0
+
+//==============================================================================
+// Data consists of Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
+// This function shows Temperature, Wind Speed, Wind Direction
+//==============================================================================
+function displayData(byval data$ as string) as integer
+	dim tmpVal
+	dim tmpStr$, tmpStr2$ 		// tmpStr2$: Temperaray temperature, speed & direction for wind
+	
+	// Display manufacturer specific data
+	rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
+	tmpStr$ = STRHEXIZE$(tmpStr$)
+	
+	// Temperature Calculation
+	tmpVal = StrHex2Bin(tmpStr$, 4) 
+	// print "tmpVal for temperature: ";tmpVal;"\n"
+	tmpVal = tmpVal * 8470 - 580000
+	SPRINT #tmpStr2$, tmpVal
+	// print "tmpStr2$: ";tmpStr2$;"\n"
+	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) - 3)
+	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) - 1) + "." + RIGHT$(tmpStr2$, 1)
+	print "Temperature: ";tmpstr2$;"\n"
+	
+	// Wind speed Calculation
+	tmpVal = StrHex2Bin(tmpStr$, 6)
+	// print "tmpVal for wind speed: ";tmpVal;"\n"
+	tmpVal = tmpVal * 3874 + 23400
+	// print "tmpVal: ";tmpVal;"\n"
+	SPRINT #tmpStr2$, tmpVal
+	// print "tmpStr2$: ";tmpStr2$;"\n"
+	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) - 3)
+	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) - 1) + "." + RIGHT$(tmpStr2$, 1)
+	print "Wind speed: ";tmpstr2$;"\n"
+	
+	// Wind Direction Calculation
+	tmpVal = StrHex2Bin(tmpStr$, 12)
+	// print "tmpVal for wind direction: ";tmpVal;"\n"
+	tmpVal = tmpVal * 14117
+	SPRINT #tmpStr2$, tmpVal
+	// print "tmpStr2$: ";tmpStr2$;"\n"
+	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) -4)
+	print "Wind Direction: ";tmpstr2$;"\n"
+endfunc 0
+
+
 
 //******************************************************************************
 // Handler definitions
@@ -154,6 +199,7 @@ function HandlerAdvRpt() as integer
 			//Show advert data
 			print dName$;" (";strhexize$(ad$);")	RSSI: ";rsi;"\n"
 			rc = showAdvData(dta$)
+			rc = displayData(dta$)
 
 			// Add scanned device to scan array
 			scanTableMac[arrIndex] = strhexize$(ad$)
