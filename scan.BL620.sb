@@ -2,9 +2,9 @@
 // Definitions
 //******************************************************************************
        
-	   //Set this to 0 to disable all debugging messages
+//Set this to 0 to disable all debugging messages
 #define ENABLE_DEBUG_PRINTS			1
-#define SPACE_IN_SCAN_TABLE			10	// available space for scaned device at a time
+#define SPACE_IN_SCAN_TABLE			5	// available space for scaned device at a time
 #define DEVICENAME					"Etesian"
 #define SCAN_SLEEP_MS	2000	// Need to be used for timer
 //******************************************************************************
@@ -26,6 +26,11 @@ sub DbgMsg(byval msg$ as string)
     print "\n";msg$
   endif
 endsub
+
+'//******************************************************************************
+'// Library Import
+'//******************************************************************************
+#include "RM1xx-defs.h"
 
 //******************************************************************************
 // Global Variable Declarations
@@ -58,6 +63,16 @@ function InArray(byRef addr$ as string) as integer
 		endif
 	next 
 endfunc 1 //no matching address is found, return 2
+
+//==============================================================================
+// Check to see via addr$ if device has been scanned
+//==============================================================================
+function resetScanTable()
+	for i = 0 to arrIndex
+		scanTableMac[i]=""
+	next
+	arrIndex = 0 
+endfunc 0 
 
 //==============================================================================
 // Get device name
@@ -125,9 +140,10 @@ endfunc 0
 // Data consists of Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
 // This function shows Temperature, Wind Speed, Wind Direction
 //==============================================================================
-function displayAppData(byval data$ as string) as integer
+function LoraTxData(byval data$ as string) as integer
 	dim tmpVal
-	dim tmpStr$, tmpStr2$ 		// tmpStr2$: Temperaray temperature, speed & direction for wind
+	// temperature, speed & direction for wind
+	dim tmpStr$, temp$, speed$, direction$
 	
 	// Display manufacturer specific data
 	rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
@@ -136,39 +152,34 @@ function displayAppData(byval data$ as string) as integer
 	// ***Data Conversion (10^4 scale)***
 	// Temperature Calculation
 	tmpVal = StrHex2Bin(tmpStr$, 4) 
-	// print "tmpVal for temperature: ";tmpVal;"\n"
 	tmpVal = tmpVal * 8470 - 580000
-	SPRINT #tmpStr2$, tmpVal
-	// print "tmpStr2$: ";tmpStr2$;"\n"
-	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) - 3)
-	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) - 1) + "." + RIGHT$(tmpStr2$, 1)
-	print "Temperature: ";tmpstr2$;"\n"
+	SPRINT #temp$, tmpVal
+	temp$ = LEFT$(temp$, strlen(temp$) - 3)
+	temp$ = LEFT$(temp$, strlen(temp$) - 1) + "." + RIGHT$(temp$, 1)
+	print "Temperature: ";temp$;"\n"
 	
 	// Wind speed Calculation
 	tmpVal = StrHex2Bin(tmpStr$, 6)
-	// print "tmpVal for wind speed: ";tmpVal;"\n"
 	tmpVal = tmpVal * 3874 + 23400
-	// print "tmpVal: ";tmpVal;"\n"
-	SPRINT #tmpStr2$, tmpVal
-	// print "tmpStr2$: ";tmpStr2$;"\n"
-	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) - 3)
-	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) - 1) + "." + RIGHT$(tmpStr2$, 1)
-	print "Wind speed: ";tmpstr2$;"\n"
+	SPRINT #speed$, tmpVal
+	speed$ = LEFT$(speed$, strlen(speed$) - 3)
+	speed$ = LEFT$(speed$, strlen(speed$) - 1) + "." + RIGHT$(speed$, 1)
+	print "Wind speed: ";speed$;"\n"
 	
 	// Wind Direction Calculation
 	tmpVal = StrHex2Bin(tmpStr$, 12)
-	// print "tmpVal for wind direction: ";tmpVal;"\n"
 	tmpVal = tmpVal * 14117
-	SPRINT #tmpStr2$, tmpVal
-	// print "tmpStr2$: ";tmpStr2$;"\n"
-	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) -4)
-	print "Wind Direction: ";tmpstr2$;"\n"
+	SPRINT #direction$, tmpVal
+	direction$ = LEFT$(direction$, strlen(direction$) -4)
+	print "Wind Direction: ";direction$;"\n"
 	
-
+	// Tx above three data over LoRa with confirmation request
+	// This is for when gateway is set to network server
+	rc = LORAMACTxData(1, temp + " " + speed + " " + direction, 1)
+	
+	// When application server is @ semtech => use 16 byte data format
 	
 endfunc 0
-
-
 
 //******************************************************************************
 // Handler definitions
@@ -203,7 +214,7 @@ function HandlerAdvRpt() as integer
 			//Show advert data
 			print dName$;" (";strhexize$(ad$);")	RSSI: ";rsi;"\n"
 			// rc = showAdvData(dta$)
-			rc = displayAppData(dta$)
+			rc = LoraTxData(dta$)
 
 			// Add scanned device to scan array
 			scanTableMac[arrIndex] = strhexize$(ad$)
@@ -214,6 +225,30 @@ function HandlerAdvRpt() as integer
   endwhile
 endfunc 1
 
+'//==============================================================================
+'// This handler is called when the LoRa Join procedure starts
+'//==============================================================================
+function HandlerLoRaJoining() as integer
+	print "Attempting to join the LoRa network\n"
+endfunc 1
+
+'//==============================================================================
+'// This handler is called when the LoRa Join Process completes successfully
+'//==============================================================================
+function HandlerLoRaJoined() as integer
+  print "Joined the LoRa network\n"
+  TimerStart(0, 5000, 1)
+endfunc 1
+
+'//==============================================================================
+'// Timer starts @ LoRa Joined with 5 seconds interval
+'// This timer will trigger to scan (resulting in LoRa Tx)
+'//==============================================================================
+function HandlerTimer0() as integer
+	rc = resetScanTable()
+    rc = BleScanStart(3000, 0)
+endfunc 1
+
 //******************************************************************************
 //******************************************************************************
 // Equivalent to main() in C
@@ -222,6 +257,15 @@ endfunc 1
 OnEvent  EVBLE_SCAN_TIMEOUT       call HandlerBlrScanTimOut
 OnEvent  EVBLE_ADV_REPORT         call HandlerAdvRpt
 
-rc = BleScanStart(3000, 0)
+OnEvent  EVLORAMACJOINING         call HandlerLoRaJoining
+OnEvent  EVLORAMACJOINED          call HandlerLoRaJoined
+
+OnEvent  EVTMR0                   call HandlerTimer0
+
+// Ble scan needs to be @ HandlerTimer0
+// rc = BleScanStart(3000, 0)
+
+// Join LoRa (Then, Ble scan can perform) 
+rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
 
 waitevent 
