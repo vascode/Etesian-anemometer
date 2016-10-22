@@ -1,0 +1,9 @@
+dim a, b, c, tmp
+
+tmp=2675
+a = tmp/1024
+b = tmp>>10
+c = tmp<<10
+print a;"\n"
+print b;"\n"
+print c;"\n"

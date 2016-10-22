@@ -125,7 +125,7 @@ endfunc 0
 // Data consists of Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
 // This function shows Temperature, Wind Speed, Wind Direction
 //==============================================================================
-function displayData(byval data$ as string) as integer
+function displayAppData(byval data$ as string) as integer
 	dim tmpVal
 	dim tmpStr$, tmpStr2$ 		// tmpStr2$: Temperaray temperature, speed & direction for wind
 	
@@ -133,6 +133,7 @@ function displayData(byval data$ as string) as integer
 	rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
 	tmpStr$ = STRHEXIZE$(tmpStr$)
 	
+	// ***Data Conversion (10^4 scale)***
 	// Temperature Calculation
 	tmpVal = StrHex2Bin(tmpStr$, 4) 
 	// print "tmpVal for temperature: ";tmpVal;"\n"
@@ -162,6 +163,9 @@ function displayData(byval data$ as string) as integer
 	// print "tmpStr2$: ";tmpStr2$;"\n"
 	tmpStr2$ = LEFT$(tmpStr2$, strlen(tmpStr2$) -4)
 	print "Wind Direction: ";tmpstr2$;"\n"
+	
+
+	
 endfunc 0
 
 
@@ -198,8 +202,8 @@ function HandlerAdvRpt() as integer
 		else 		
 			//Show advert data
 			print dName$;" (";strhexize$(ad$);")	RSSI: ";rsi;"\n"
-			rc = showAdvData(dta$)
-			rc = displayData(dta$)
+			// rc = showAdvData(dta$)
+			rc = displayAppData(dta$)
 
 			// Add scanned device to scan array
 			scanTableMac[arrIndex] = strhexize$(ad$)
