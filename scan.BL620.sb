@@ -27,10 +27,10 @@ sub DbgMsg(byval msg$ as string)
   endif
 endsub
 
-'//******************************************************************************
-'// Library Import
-'//******************************************************************************
-#include "RM1xx-defs.h"
+//******************************************************************************
+// Library Import
+//******************************************************************************
+// #include "RM1xx-defs.h"
 
 //******************************************************************************
 // Global Variable Declarations
@@ -236,31 +236,31 @@ function HandlerAdvRpt() as integer
   endwhile
 endfunc 1
 
-'//==============================================================================
-'// This handler is called when the LoRa Join procedure starts
-'//==============================================================================
+//==============================================================================
+// This handler is called when the LoRa Join procedure starts
+//==============================================================================
 function HandlerLoRaJoining() as integer
 	print "Attempting to join the LoRa network\n"
 endfunc 1
 
-'//==============================================================================
-'// This handler is called when the LoRa Join Process completes successfully
-'//==============================================================================
+//==============================================================================
+// This handler is called when the LoRa Join Process completes successfully
+//==============================================================================
 function HandlerLoRaJoined() as integer
   print "Joined the LoRa network\n\n"
   TimerStart(0, 5000, 1)
 endfunc 1
 
-'//==============================================================================
-'// Timer starts @ LoRa Joined with 5 seconds interval
-'// This timer will trigger to scan (resulting in LoRa Tx)
-'//==============================================================================
+//==============================================================================
+// Timer starts @ LoRa Joined with 5 seconds interval
+// This timer will trigger to scan (resulting in LoRa Tx)
+//==============================================================================
 function HandlerTimer0() as integer
 	rc = resetScanTable()
     rc = BleScanStart(3000, 0)
 endfunc 1
 
-//******************************************************************************
+
 //******************************************************************************
 // Equivalent to main() in C
 //******************************************************************************
@@ -273,15 +273,13 @@ OnEvent  EVLORAMACJOINED          call HandlerLoRaJoined
 
 OnEvent  EVTMR0                   call HandlerTimer0
 
-// [Testing] Ble scan needs to be @ HandlerTimer0
-// rc = BleScanStart(3000, 0)
-
+// Welcome message
 print "********************************************************\n"
 print "This application will join the LoRa gateway.\n"
 print "Then it will update infomation for Etesian's anemometer.\n"
 print "********************************************************\n\n"
 
-// Join LoRa (Then, Ble scan can perform) 
-rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
+// Join LoRa with LORAMAC_JOIN_BY_REQUEST (Then, Ble scan can perform) 
+rc=LORAMACJoin(1)
 
 waitevent 
