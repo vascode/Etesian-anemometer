@@ -68,6 +68,7 @@ endfunc 1 //no matching address is found, return 2
 // Check to see via addr$ if device has been scanned
 //==============================================================================
 function resetScanTable()
+	dim i
 	for i = 0 to arrIndex
 		scanTableMac[i]=""
 	next
@@ -143,11 +144,20 @@ endfunc 0
 function LoraTxData(byval data$ as string) as integer
 	dim tmpVal
 	// temperature, speed & direction for wind
-	dim tmpStr$, temp$, speed$, direction$
+	dim tmpStr$, tmpStr2$, id$, temp$, speed$, direction$
 	
 	// Display manufacturer specific data
 	rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
 	tmpStr$ = STRHEXIZE$(tmpStr$)
+	
+	// Sensor_ID 
+	tmpVal = StrHex2Bin(tmpStr$, 8)
+	SPRINT #id$, integer.h' tmpVal	
+	tmpVal = StrHex2Bin(tmpStr$, 10)	
+	SPRINT #tmpStr2$, integer.h' tmpVal	
+	id$ = removeZeros(id$) + removeZeros(tmpStr2$)	
+	print "  Sensor ID : ";id$;"\n"
+	
 	
 	// ***Data Conversion (10^4 scale)***
 	// Temperature Calculation
@@ -156,7 +166,7 @@ function LoraTxData(byval data$ as string) as integer
 	SPRINT #temp$, tmpVal
 	temp$ = LEFT$(temp$, strlen(temp$) - 3)
 	temp$ = LEFT$(temp$, strlen(temp$) - 1) + "." + RIGHT$(temp$, 1)
-	print "Temperature: ";temp$;"\n"
+	print "     Temperature: ";temp$;"\n"
 	
 	// Wind speed Calculation
 	tmpVal = StrHex2Bin(tmpStr$, 6)
@@ -164,18 +174,19 @@ function LoraTxData(byval data$ as string) as integer
 	SPRINT #speed$, tmpVal
 	speed$ = LEFT$(speed$, strlen(speed$) - 3)
 	speed$ = LEFT$(speed$, strlen(speed$) - 1) + "." + RIGHT$(speed$, 1)
-	print "Wind speed: ";speed$;"\n"
+	print "     Wind speed: ";speed$;"\n"
 	
 	// Wind Direction Calculation
 	tmpVal = StrHex2Bin(tmpStr$, 12)
 	tmpVal = tmpVal * 14117
 	SPRINT #direction$, tmpVal
 	direction$ = LEFT$(direction$, strlen(direction$) -4)
-	print "Wind Direction: ";direction$;"\n"
+	print "     Wind Direction: ";direction$;"\n"
 	
 	// Tx above three data over LoRa with confirmation request
 	// This is for when gateway is set to network server
-	rc = LORAMACTxData(1, temp + " " + speed + " " + direction, 1)
+	tmpStr$ = "[ID: " + id$ + "] T: " + temp$ + ", S: " + speed$ + ",D: " + direction$
+	rc = LORAMACTxData(1, tmpStr$ , 1)
 	
 	// When application server is @ semtech => use 16 byte data format
 	
@@ -189,8 +200,8 @@ endfunc 0
 // This handler is called when there is a scan attempt timeout
 //==============================================================================
 function HandlerBlrScanTimOut() as integer
-  DbgMsg( "\nScanning stopped via timeout" )
-endfunc 0
+  // DbgMsg( "Scanning stopped via timeout\n" )
+endfunc 1
 
 //==============================================================================
 // This handler is called when there is an advert report waiting to be read
@@ -236,7 +247,7 @@ endfunc 1
 '// This handler is called when the LoRa Join Process completes successfully
 '//==============================================================================
 function HandlerLoRaJoined() as integer
-  print "Joined the LoRa network\n"
+  print "Joined the LoRa network\n\n"
   TimerStart(0, 5000, 1)
 endfunc 1
 
@@ -262,8 +273,13 @@ OnEvent  EVLORAMACJOINED          call HandlerLoRaJoined
 
 OnEvent  EVTMR0                   call HandlerTimer0
 
-// Ble scan needs to be @ HandlerTimer0
+// [Testing] Ble scan needs to be @ HandlerTimer0
 // rc = BleScanStart(3000, 0)
+
+print "********************************************************\n"
+print "This application will join the LoRa gateway.\n"
+print "Then it will update infomation for Etesian's anemometer.\n"
+print "********************************************************\n\n"
 
 // Join LoRa (Then, Ble scan can perform) 
 rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)

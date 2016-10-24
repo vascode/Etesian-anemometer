@@ -8,7 +8,7 @@
 dim advFlags	'//Disoverability
 dim rc, s$, dn$
 // dim ad$:ad$="00\01\02\03\04\05\06\07"
-dim ad$:ad$="\41\03\99\13\30\39\80\"	//99: temperature 21: wind speed, 80: wind direction
+dim ad$:ad$="\41\03\99\13\55\55\80\"	//99: temperature 21: wind speed, 80: wind direction
 dim prAddr$:prAddr$=""
 dim advRpt$, scnRpt$
 dim devnme$ as string '//holds base device name "Etesian"
@@ -28,6 +28,6 @@ rc = BleAdvRptAppendAD(advRpt$,0xFF,ad$)
 rc = BleAdvRptsCommit(advRpt$,scnRpt$) 
 
 rc = BleAdvertStart(2,prAddr$, 100, 0,0)
-print "start advert forever with advert data";STRHEXIZE$(ad$);"\n"
+print "start advert forever with advert data ";STRHEXIZE$(ad$);"\n"
 
 waitevent
