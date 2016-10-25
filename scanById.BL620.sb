@@ -284,7 +284,7 @@ function HandlerUartRxCmd() as integer
 endfunc 1
 
 //------------------------------------------------------------------------------
-// Process Sensor ID
+// Process Sensor ID from user input
 //------------------------------------------------------------------------------
 function HandlerTimer1()
 	dim nMatch, idLen
@@ -320,8 +320,5 @@ OnEvent  EVUARTRX                 call HandlerUartRxCmd
 WelcomeMsg()
 // Flush Rx buffer
 UartFlush(01)
-
-// // Join LoRa with LORAMAC_JOIN_BY_REQUEST (Then, Ble scan can perform) 
-// rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
 
 waitevent 
