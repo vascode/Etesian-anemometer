@@ -42,6 +42,9 @@ endsub
 dim rc
 dim scanTableMac[SPACE_IN_SCAN_TABLE] as string		// Table for scanned BLE devices Mac address (database)
 dim arrIndex as integer		// Index for scan array
+dim stRsp$ as string        //Uart rx data is stored here
+dim urtInput$ as string	// Uart input
+dim urtSensorId$ as string    //Sensor id obtained from uart
 
 //******************************************************************************
 // Initialisse Global Variable
@@ -99,7 +102,7 @@ FUNCTION RemoveZeros(data$) AS STRING
 	dim i, Done, tmpStr$ : i = 0 : Done = 0
 	WHILE (i < strlen(data$))
 		tmpStr$ = MID$(data$, i, 1)
-		IF (STRCMP(tmpStr$, "0") != 0) THEN
+		IF (strCmp(tmpStr$, "0") != 0) THEN
 			//Other number found - cut string to this length and mark as finished
 			tmpStr$ = RIGHT$(data$, strlen(data$)-i)
 			i = strlen(data$)
@@ -144,7 +147,7 @@ endfunc 0
 // Data consists of Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
 // This function shows ID, Temperature, Wind Speed, Wind Direction
 //==============================================================================
-function LoraTxData(byval data$ as string) as integer
+function LoraTxData(byval data$ as string, byval name$ as string, byval addr$ as string, byval rssi as integer) as integer
 	dim tmpVal
 	// temperature, speed & direction for wind
 	dim tmpStr$, tmpStr2$, id$, temp$, speed$, direction$
@@ -159,87 +162,49 @@ function LoraTxData(byval data$ as string) as integer
 	tmpVal = StrHex2Bin(tmpStr$, 10)	
 	SPRINT #tmpStr2$, integer.h' tmpVal	
 	id$ = RemoveZeros(id$) + RemoveZeros(tmpStr2$)	
-	print "  Sensor ID : ";id$;"\n"
 	
-	
-	// ***Data Conversion (10^4 scale)***
-	// Temperature Calculation
-	tmpVal = StrHex2Bin(tmpStr$, 4) 
-	tmpVal = tmpVal * 8470 - 580000
-	SPRINT #temp$, tmpVal
-	temp$ = LEFT$(temp$, strlen(temp$) - 3)
-	temp$ = LEFT$(temp$, strlen(temp$) - 1) + "." + RIGHT$(temp$, 1)
-	print "     Temperature: ";temp$;"\n"
-	
-	// Wind speed Calculation
-	tmpVal = StrHex2Bin(tmpStr$, 6)
-	tmpVal = tmpVal * 3874 + 23400
-	SPRINT #speed$, tmpVal
-	speed$ = LEFT$(speed$, strlen(speed$) - 3)
-	speed$ = LEFT$(speed$, strlen(speed$) - 1) + "." + RIGHT$(speed$, 1)
-	print "     Wind speed: ";speed$;"\n"
-	
-	// Wind Direction Calculation
-	tmpVal = StrHex2Bin(tmpStr$, 12)
-	tmpVal = tmpVal * 14117
-	SPRINT #direction$, tmpVal
-	direction$ = LEFT$(direction$, strlen(direction$) -4)
-	print "     Wind Direction: ";direction$;"\n"
-	
-	// Tx above three data over LoRa with confirmation request
-	// This is for when gateway is set to network server
-	tmpStr$ = "[ID: " + id$ + "] T: " + temp$ + ", S: " + speed$ + ",D: " + direction$
-	rc = LORAMACTxData(1, tmpStr$ , 1)
-endfunc 0
-
-//==============================================================================
-// This function is used to send data to Semtech website. 
-// In graph, pressure section will be used to show wind speed data
-// In graph, battery section will be used to show wind direction data
-//==============================================================================
-function LoRaTxToSemtech(byval data$) as integer
-	dim tmpVal
-	// temperature, speed & direction for wind
-	dim tmpStr$, temp, speed, direction
-	
-	// Display manufacturer specific data
-	rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
-	tmpStr$ = STRHEXIZE$(tmpStr$)
-	
-	// ***Data Conversion (10^4 scale)***
-	// Temperature Calculation
-	tmpVal = StrHex2Bin(tmpStr$, 4) 
-	tmpVal = tmpVal * 8470 - 580000
-	temp = tmpVal/10000
-	print "     Temperature: ";temp;"\n"
-	
-	// Wind speed Calculation
-	tmpVal = StrHex2Bin(tmpStr$, 6)
-	tmpVal = tmpVal * 3874 + 23400
-	speed = tmpVal/10000
-	print "     Wind speed: ";speed;"\n"
-	
-	// Wind Direction Calculation
-	tmpVal = StrHex2Bin(tmpStr$, 12)
-	tmpVal = tmpVal * 14117
-	direction = tmpVal/10000
-	print "     Wind Direction: ";direction;"\n"
-
-	// When application server is @ semtech => use 16 byte data format
-	// This can be used when only one Etesian device is detected as it does not show ID 
-	tmpStr$ = "\00\00\00\00\00\00\00\00\3A\6D\4B\C6\07\EC\00\85" 	
-	rc=StrSetChr(tmpStr$,speed,2)		// use Pressure section for speed
-	rc=StrSetChr(tmpStr$,direction,7)	//use battery section for direction
-	rc=StrSetChr(tmpStr$,temp,4)		//use temperature section for temp
-	rc = LORAMACTxData(1, tmpStr$ , 1)
-
+	if strCmp(id$, urtSensorId$) == 0 then 	
+		//Show advert data
+		print "\n";name$;" (";strhexize$(addr$);")	RSSI: ";rssi;"\n"
+		print "   Sensor ID : ";id$;"\n"
+		
+		// ***Data Conversion (10^4 scale)***
+		// Temperature Calculation
+		tmpVal = StrHex2Bin(tmpStr$, 4) 
+		tmpVal = tmpVal * 8470 - 580000
+		SPRINT #temp$, tmpVal
+		temp$ = LEFT$(temp$, strlen(temp$) - 3)
+		temp$ = LEFT$(temp$, strlen(temp$) - 1) + "." + RIGHT$(temp$, 1)
+		print "      Temperature: ";temp$;"\n"
+		
+		// Wind speed Calculation
+		tmpVal = StrHex2Bin(tmpStr$, 6)
+		tmpVal = tmpVal * 3874 + 23400
+		SPRINT #speed$, tmpVal
+		speed$ = LEFT$(speed$, strlen(speed$) - 3)
+		speed$ = LEFT$(speed$, strlen(speed$) - 1) + "." + RIGHT$(speed$, 1)
+		print "      Wind speed: ";speed$;"\n"
+		
+		// Wind Direction Calculation
+		tmpVal = StrHex2Bin(tmpStr$, 12)
+		tmpVal = tmpVal * 14117
+		SPRINT #direction$, tmpVal
+		direction$ = LEFT$(direction$, strlen(direction$) -4)
+		print "      Wind Direction: ";direction$;"\n"
+		
+		// Tx above three data over LoRa with confirmation request
+		// This is for when gateway is set to network server
+		tmpStr$ = "[ID: " + id$ + "] T: " + temp$ + ", S: " + speed$ + ",D: " + direction$
+		rc = LORAMACTxData(1, tmpStr$ , 1)
+	endif
 endfunc 0
 
 sub WelcomeMsg()
 	print "********************************************************\n"
-	print "This application will join the LoRa gateway.\n"
+	print "Enter Sensor ID (4 digit) for Etesian anemometer.\n"
 	print "Then it will update infomation for Etesian's anemometer.\n"
-	print "********************************************************\n\n"
+	print "********************************************************\n"
+	print "Sensor ID : "
 endsub
 
 //******************************************************************************
@@ -274,12 +239,9 @@ function HandlerAdvRpt() as integer
 				scanTableMac[arrIndex] = ""
 			next
 			arrIndex = 0			
-		else 		
-			//Show advert data
-			print "\n";dName$;" (";strhexize$(ad$);")	RSSI: ";rsi;"\n"
+		else 					
 			// rc = showAdvData(dta$)
-			rc = LoraTxData(dta$)
-			// rc = LoRaTxToSemtech(dta$)
+			rc = LoraTxData(dta$, dName$, ad$, rsi)
 
 			// Add scanned device to scan array
 			scanTableMac[arrIndex] = strhexize$(ad$)
@@ -314,18 +276,30 @@ function HandlerTimer0() as integer
     rc = BleScanStart(3000, 0)
 endfunc 1
 
-//-------------------------------------------------------------------------
-// TxDone event - packet has been transmitted to the gateway
-//-------------------------------------------------------------------------
-function HandlerTxDone() as integer 
-	print "HandlerTxDone\n"
+//------------------------------------------------------------------------------
+// When Uart input is recieved for sensor ID
+//------------------------------------------------------------------------------
+function HandlerUartRxCmd() as integer
+	timerStart(1, 100, 0)
 endfunc 1
 
 //------------------------------------------------------------------------------
-// NoSync event - an RxWindow has closed after it failed to receive a sync pulse
+// Process Sensor ID
 //------------------------------------------------------------------------------
-FUNCTION HandlerNoSync() As Integer
-	print "HandlerNoSync\n"
+function HandlerTimer1()
+	dim nMatch, idLen
+	//check if CR has been received
+	nMatch=UartReadMatch(stRsp$,13)	
+	
+	if nMatch == 5 then
+		//length of user input was 4 & CR exists in the input buffer
+		urtInput$ = StrSplitLeft$(stRsp$,nMatch)
+		idLen = ExtractStrToken(urtInput$, urtSensorId$) //get sensor id from user 
+		rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
+	else
+		print "Invalid format of ID! Run application again ";nMatch
+		exitfunc 0
+	endif
 endfunc 1
 
 //******************************************************************************
@@ -337,15 +311,17 @@ OnEvent  EVBLE_ADV_REPORT         call HandlerAdvRpt
 
 OnEvent  EVLORAMACJOINING         call HandlerLoRaJoining
 OnEvent  EVLORAMACJOINED          call HandlerLoRaJoined
-// OnEvent  EVLORAMACTXDONE 		  call HandlerTxDone
-// ONEVENT  EVLORAMACNOSYNC 		  CALL HandlerNoSync
 
 OnEvent  EVTMR0                   call HandlerTimer0
+OnEvent	 EVTMR1					  call HandlerTimer1
+OnEvent  EVUARTRX                 call HandlerUartRxCmd
 
-// Welcome message
+// Welcome message (get Sensor ID from user here)
 WelcomeMsg()
+// Flush Rx buffer
+UartFlush(01)
 
-// Join LoRa with LORAMAC_JOIN_BY_REQUEST (Then, Ble scan can perform) 
-rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
+// // Join LoRa with LORAMAC_JOIN_BY_REQUEST (Then, Ble scan can perform) 
+// rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
 
 waitevent 
