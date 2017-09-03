@@ -9,7 +9,9 @@
 #define SCAN_SLEEP_MS	2000	// Need to be used for timer
 
 #define LORAMAC_JOIN_BY_REQUEST 	1
-#define LORAMAC_OPT_DATA_RATE 		2
+#define LORAMAC_OPT_DATA_RATE       2 //RW - The data rate of the LoRa radio
+
+
 //******************************************************************************
 // Register Error Handler as early as possible
 //******************************************************************************
@@ -42,6 +44,7 @@ endsub
 dim rc
 dim scanTableMac[SPACE_IN_SCAN_TABLE] as string		// Table for scanned BLE devices Mac address (database)
 dim arrIndex as integer		// Index for scan array
+dim str$
 
 //******************************************************************************
 // Initialisse Global Variable
@@ -51,6 +54,10 @@ arrIndex = 0
 //******************************************************************************
 // Function and Subroutine definitions
 //******************************************************************************
+
+SUB PrintMsg(str$)
+	rc = UartWrite(str$)
+ENDSUB 
 
 //==============================================================================
 // Check to see via addr$ if device has been scanned
@@ -279,8 +286,8 @@ function HandlerAdvRpt() as integer
 			//Show advert data
 			print "\n";dName$;" (";strhexize$(ad$);")	RSSI: ";rsi;"\n"
 			// rc = showAdvData(dta$)
-			rc = LoraTxData(dta$)
-			// rc = LoRaTxToSemtech(dta$)
+			// rc = LoraTxData(dta$)
+			rc = LoRaTxToSemtech(dta$)
 
 			// Add scanned device to scan array
 			scanTableMac[arrIndex] = strhexize$(ad$)
@@ -295,20 +302,33 @@ endfunc 1
 // This handler is called when the LoRa Join procedure starts
 //==============================================================================
 function HandlerLoRaJoining() as integer
-	print "Attempting to join the LoRa network\n"
+	print "Attempting to join the LoRa network"
 endfunc 1
 
 //==============================================================================
 // This handler is called when the LoRa Join Process completes successfully
 //==============================================================================
 function HandlerLoRaJoined() as integer
-  print "Joined the LoRa network\n"
-  // change data rate from DR0 to DR1 to increase max payload
+  print " - Joined the LoRa network\n"
   dim temp$
   temp$ ="1"
-  rc = LoraMacSetOption(LORAMAC_OPT_DATA_RATE, temp$) 
+  rc = LoraMacSetOption(LORAMAC_OPT_DATA_RATE, temp$)
   
-  TimerStart(0, 5000, 1)
+  dim currentsize, maxsize
+  rc = LoramacQueryTxPossible(15,currentsize,maxsize) 
+	if rc == 0 then 
+	  //Everything ok 
+	  print "current ";currentsize 
+	  print "max ";maxsize 
+	else 
+	  print "rc for LoraMacQueryTxPossible: ";rc
+      print "current ";currentsize 
+    endif 
+  TimerStart(0, 20000, 1)
+endfunc 1
+
+function HandlerLoRaJoinFailed() as integer
+	print "\nFailed to join the LoRa network"
 endfunc 1
 
 //==============================================================================
@@ -324,14 +344,50 @@ endfunc 1
 // TxDone event - packet has been transmitted to the gateway
 //-------------------------------------------------------------------------
 function HandlerTxDone() as integer 
-	print "HandlerTxDone\n"
+	print " - HandlerTxDone\n"
 endfunc 1
 
 //------------------------------------------------------------------------------
 // NoSync event - an RxWindow has closed after it failed to receive a sync pulse
 //------------------------------------------------------------------------------
 FUNCTION HandlerNoSync() As Integer
-	print "HandlerNoSync\n"
+	print " - HandlerNoSync\n"
+endfunc 1
+
+'//==============================================================================
+'// This handler is called when there is a LoRa TX Complete event
+'//==============================================================================
+function HandlerLoRaTxComp() as integer
+	print "\nLoRa TX Complete Event"
+	// if linkCheckLoop>0 then
+		// rc=LORAMACLinkCheck()
+	// endif
+endfunc 1
+
+
+'//==============================================================================
+'// This handler is called when there is a LoRa RX Complete event
+'//==============================================================================
+function HandlerLoRaRxComp() as integer
+	print "\nLoRa RX Complete Event\n"
+endfunc 1
+
+function HandlerLoRaTxTimeout() as integer
+	print "\nLoRa TX Timeout"
+endfunc 1
+function HandlerLoRaRxTimeout() as integer
+	print "\nLoRa RX Timeout"
+endfunc 1
+function HandlerLoRaRxError() as integer
+	print "\nLoRa RX Error"
+endfunc 1
+
+//==============================================================================
+// This handler is called when An ADR command has been receive as part of a downlink.
+//==============================================================================
+function HandlerLoRaAdr() As Integer
+	str$ = "\nAdr received"
+	PrintMsg(str$)
 endfunc 1
 
 //******************************************************************************
@@ -343,8 +399,20 @@ OnEvent  EVBLE_ADV_REPORT         call HandlerAdvRpt
 
 OnEvent  EVLORAMACJOINING         call HandlerLoRaJoining
 OnEvent  EVLORAMACJOINED          call HandlerLoRaJoined
-// OnEvent  EVLORAMACTXDONE 		  call HandlerTxDone
-// ONEVENT  EVLORAMACNOSYNC 		  CALL HandlerNoSync
+OnEvent  EVLORAMACJOINFAIL        call HandlerLoRaJoinFailed
+
+OnEvent  EVLORAMACTXDONE 		  call HandlerTxDone
+ONEVENT  EVLORAMACNOSYNC 		  CALL HandlerNoSync
+
+// OnEvent  EVLORAMACTXCOMPLETE      call HandlerLoRaTxComp
+OnEvent  EVLORAMACRXCOMPLETE      call HandlerLoRaRxComp
+OnEvent  EVLORAMACTXTIMEOUT			call HandlerLoRaTxTimeout
+OnEvent  EVLORAMACRXTIMEOUT			call HandlerLoRaRxTimeout
+OnEvent  EVLORAMACRXERROR			call HandlerLoRaRxError
+
+OnEvent  EVLORAMACADR				CALL HandlerLoRaAdr
+
+
 
 OnEvent  EVTMR0                   call HandlerTimer0
 
@@ -353,5 +421,6 @@ WelcomeMsg()
 
 // Join LoRa with LORAMAC_JOIN_BY_REQUEST (Then, Ble scan can perform) 
 rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
+rc = LORAMACSetDebug(1,4,5)
 
 waitevent 
