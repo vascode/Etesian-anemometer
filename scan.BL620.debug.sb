@@ -286,8 +286,8 @@ function HandlerAdvRpt() as integer
 			//Show advert data
 			print "\n";dName$;" (";strhexize$(ad$);")	RSSI: ";rsi;"\n"
 			// rc = showAdvData(dta$)
-			// rc = LoraTxData(dta$)
-			rc = LoRaTxToSemtech(dta$)
+			rc = LoraTxData(dta$)
+			// rc = LoRaTxToSemtech(dta$)
 
 			// Add scanned device to scan array
 			scanTableMac[arrIndex] = strhexize$(ad$)

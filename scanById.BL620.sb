@@ -3,20 +3,22 @@
 //******************************************************************************
        
 //Set this to 0 to disable all debugging messages
-#define ENABLE_DEBUG_PRINTS			1
-#define SPACE_IN_SCAN_TABLE			5	// available space for scaned device at a time
-#define DEVICENAME					"Etesian"
-#define SCAN_SLEEP_MS	2000	// Need to be used for timer
+#define ENABLE_DEBUG_PRINTS         1
+#define SPACE_IN_SCAN_TABLE         5   // available space for scaned device at a time
+#define DEVICENAME                  "Etesian"
+#define SCAN_SLEEP_MS   2000    // Need to be used for timer
 
-#define LORAMAC_JOIN_BY_REQUEST 1
+#define LORAMAC_JOIN_BY_REQUEST     1
+#define LORAMAC_OPT_DATA_RATE       2
+
 
 //******************************************************************************
 // Register Error Handler as early as possible
 //******************************************************************************
 sub HandlerOnErr()
-  if (ENABLE_DEBUG_PRINTS!=0) then
-    print "\n OnErr - ";GetLastError();"\n"
-  endif
+    if (ENABLE_DEBUG_PRINTS!=0) then
+        print "\n OnErr - ";GetLastError();"\n"
+    endif
 endsub
 onerror next HandlerOnErr
 
@@ -25,9 +27,9 @@ onerror next HandlerOnErr
 //******************************************************************************
 
 sub DbgMsg(byval msg$ as string)
-  if (ENABLE_DEBUG_PRINTS!=0) then
-    print "\n";msg$
-  endif
+    if (ENABLE_DEBUG_PRINTS!=0) then
+        print "\n";msg$
+    endif
 endsub
 
 //******************************************************************************
@@ -40,10 +42,10 @@ endsub
 //******************************************************************************
 
 dim rc
-dim scanTableMac[SPACE_IN_SCAN_TABLE] as string		// Table for scanned BLE devices Mac address (database)
-dim arrIndex as integer		// Index for scan array
+dim scanTableMac[SPACE_IN_SCAN_TABLE] as string     // Table for scanned BLE devices Mac address (database)
+dim arrIndex as integer     // Index for scan array
 dim stRsp$ as string        //Uart rx data is stored here
-dim urtInput$ as string	// Uart input
+dim urtInput$ as string // Uart input
 dim urtSensorId$ as string    //Sensor id obtained from uart
 
 //******************************************************************************
@@ -59,88 +61,88 @@ arrIndex = 0
 // Check to see via addr$ if device has been scanned
 //==============================================================================
 function InArray(byRef addr$ as string) as integer
-	dim i, hexAddr$
-	hexAddr$ = strhexize$(addr$)	//strhexize the addr$ to compare with one in scanTableMac[]	
-	
-	for i = 0 to arrIndex
-		if strCmp(scanTableMac[i], hexAddr$) == 0 then
-			// Success! found matching address -> return 0
-			exitfunc 0 
-		endif
-	next 
+    dim i, hexAddr$
+    hexAddr$ = strhexize$(addr$)    //strhexize the addr$ to compare with one in scanTableMac[] 
+        
+    for i = 0 to arrIndex
+        if strCmp(scanTableMac[i], hexAddr$) == 0 then
+            // Success! found matching address -> return 0
+            exitfunc 0 
+        endif
+    next 
 endfunc 1 //no matching address is found, return 2
 
 //==============================================================================
 // Check to see via addr$ if device has been scanned
 //==============================================================================
 function ResetScanTable()
-	dim i
-	for i = 0 to arrIndex
-		scanTableMac[i]=""
-	next
-	arrIndex = 0 
+    dim i
+    for i = 0 to arrIndex
+        scanTableMac[i]=""
+    next
+    arrIndex = 0 
 endfunc 0 
 
 //==============================================================================
 // Get device name
 //==============================================================================
 function GetDeviceName(byval data$ as string) as string
-	dim devName$ as string	// Device name
-	
-	// Get device name via data type 0x08
-	rc = BLEGETADBYTAG(data$, 8, devName$)
-	if (rc != 0) then
-		// Name not found at index 0x08, check 0x09
-		rc = BLEGETADBYTAG(data$, 9, devName$)
-	endif
+    dim devName$ as string  // Device name
+    
+    // Get device name via data type 0x08
+    rc = BLEGETADBYTAG(data$, 8, devName$)
+    if (rc != 0) then
+        // Name not found at index 0x08, check 0x09
+        rc = BLEGETADBYTAG(data$, 9, devName$)
+    endif
 endfunc devName$
 
 //==============================================================================
 //This function removes leading 0s from the front of a string
 //==============================================================================
 FUNCTION RemoveZeros(data$) AS STRING
-	dim i, Done, tmpStr$ : i = 0 : Done = 0
-	WHILE (i < strlen(data$))
-		tmpStr$ = MID$(data$, i, 1)
-		IF (strCmp(tmpStr$, "0") != 0) THEN
-			//Other number found - cut string to this length and mark as finished
-			tmpStr$ = RIGHT$(data$, strlen(data$)-i)
-			i = strlen(data$)
-			Done = 1
-		ENDIF
-		i = i+1
-	ENDWHILE
+    dim i, Done, tmpStr$ : i = 0 : Done = 0
+    WHILE (i < strlen(data$))
+        tmpStr$ = MID$(data$, i, 1)
+        IF (strCmp(tmpStr$, "0") != 0) THEN
+            //Other number found - cut string to this length and mark as finished
+            tmpStr$ = RIGHT$(data$, strlen(data$)-i)
+            i = strlen(data$)
+            Done = 1
+        ENDIF
+        i = i+1
+    ENDWHILE
 
-	IF (Done == 0) THEN
-		//Other number not found in provided string
-		tmpStr$ = "0"
-	ENDIF
+    IF (Done == 0) THEN
+        //Other number not found in provided string
+        tmpStr$ = "0"
+    ENDIF
 ENDFUNC tmpStr$
 
 //==============================================================================
 // Show Advert Data according to data type
 //==============================================================================
 function ShowAdvData(byval data$ as string) as integer
-	dim tmpVal, tmpStr$, tmpStr2$
+    dim tmpVal, tmpStr$, tmpStr2$
 
-	tmpVal = 0
-	
-	print "Advertising data [hex]:\n"
-	while (tmpVal <= 0xff) 
-		if (tmpVal == 8) then
-			// Skip name tags
-			tmpVal = 10
-		endif
-		rc = BLEGETADBYTAG(data$, tmpVal, tmpStr$)
-		if (rc == 0) then
-			// Output tag
-			tmpStr2$ = ""
-			SPRINT #tmpStr2$,INTEGER.H'tmpVal
-			tmpStr2$ = RemoveZeros(tmpStr2$)
-			PRINT "  Length: ";strlen(tmpStr$);", Type: 0x";tmpStr2$;", Value: ";STRHEXIZE$(tmpStr$);"\n"			
-		endif
-		tmpVal = tmpVal+1
-	endwhile
+    tmpVal = 0
+    
+    print "Advertising data [hex]:\n"
+    while (tmpVal <= 0xff) 
+        if (tmpVal == 8) then
+            // Skip name tags
+            tmpVal = 10
+        endif
+        rc = BLEGETADBYTAG(data$, tmpVal, tmpStr$)
+        if (rc == 0) then
+            // Output tag
+            tmpStr2$ = ""
+            SPRINT #tmpStr2$,INTEGER.H'tmpVal
+            tmpStr2$ = RemoveZeros(tmpStr2$)
+            PRINT "  Length: ";strlen(tmpStr$);", Type: 0x";tmpStr2$;", Value: ";STRHEXIZE$(tmpStr$);"\n"           
+        endif
+        tmpVal = tmpVal+1
+    endwhile
 endfunc 0
 
 //==============================================================================
@@ -148,63 +150,65 @@ endfunc 0
 // This function shows ID, Temperature, Wind Speed, Wind Direction
 //==============================================================================
 function LoraTxData(byval data$ as string, byval name$ as string, byval addr$ as string, byval rssi as integer) as integer
-	dim tmpVal
-	// temperature, speed & direction for wind
-	dim tmpStr$, tmpStr2$, id$, temp$, speed$, direction$
-	
-	// Display manufacturer specific data
-	rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
-	tmpStr$ = STRHEXIZE$(tmpStr$)
-	
-	// Sensor_ID 
-	tmpVal = StrHex2Bin(tmpStr$, 8)
-	SPRINT #id$, integer.h' tmpVal	
-	tmpVal = StrHex2Bin(tmpStr$, 10)	
-	SPRINT #tmpStr2$, integer.h' tmpVal	
-	id$ = RemoveZeros(id$) + RemoveZeros(tmpStr2$)	
-	
-	if strCmp(id$, urtSensorId$) == 0 then 	
-		//Show advert data
-		print "\n";name$;" (";strhexize$(addr$);")	RSSI: ";rssi;"\n"
-		print "   Sensor ID : ";id$;"\n"
-		
-		// ***Data Conversion (10^4 scale)***
-		// Temperature Calculation
-		tmpVal = StrHex2Bin(tmpStr$, 4) 
-		tmpVal = tmpVal * 8470 - 580000
-		SPRINT #temp$, tmpVal
-		temp$ = LEFT$(temp$, strlen(temp$) - 3)
-		temp$ = LEFT$(temp$, strlen(temp$) - 1) + "." + RIGHT$(temp$, 1)
-		print "      Temperature: ";temp$;"\n"
-		
-		// Wind speed Calculation
-		tmpVal = StrHex2Bin(tmpStr$, 6)
-		tmpVal = tmpVal * 3874 + 23400
-		SPRINT #speed$, tmpVal
-		speed$ = LEFT$(speed$, strlen(speed$) - 3)
-		speed$ = LEFT$(speed$, strlen(speed$) - 1) + "." + RIGHT$(speed$, 1)
-		print "      Wind speed: ";speed$;"\n"
-		
-		// Wind Direction Calculation
-		tmpVal = StrHex2Bin(tmpStr$, 12)
-		tmpVal = tmpVal * 14117
-		SPRINT #direction$, tmpVal
-		direction$ = LEFT$(direction$, strlen(direction$) -4)
-		print "      Wind Direction: ";direction$;"\n"
-		
-		// Tx above three data over LoRa with confirmation request
-		// This is for when gateway is set to network server
-		tmpStr$ = "[ID: " + id$ + "] T: " + temp$ + ", S: " + speed$ + ",D: " + direction$
-		rc = LORAMACTxData(1, tmpStr$ , 1)
-	endif
+    dim tmpVal
+    // temperature, speed & direction for wind
+    dim tmpStr$, tmpStr2$, id$, temp$, speed$, direction$
+    
+    // Display manufacturer specific data
+    rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)    
+    tmpStr$ = STRHEXIZE$(tmpStr$)
+    
+    // Sensor_ID 
+    tmpVal = StrHex2Bin(tmpStr$, 8)
+    SPRINT #id$, integer.h' tmpVal  
+    tmpVal = StrHex2Bin(tmpStr$, 10)    
+    SPRINT #tmpStr2$, integer.h' tmpVal 
+    id$ = RemoveZeros(id$) + RemoveZeros(tmpStr2$)  
+    
+    if strCmp(id$, urtSensorId$) == 0 then  
+        //Show advert data
+        print "\n";name$;" (";strhexize$(addr$);")  RSSI: ";rssi;"\n"
+        print "   Sensor ID : ";id$;"\n"
+        
+        // ***Data Conversion (10^4 scale)***
+        // Temperature Calculation
+        tmpVal = StrHex2Bin(tmpStr$, 4) 
+        tmpVal = tmpVal * 8470 - 580000
+        SPRINT #temp$, tmpVal
+        temp$ = LEFT$(temp$, strlen(temp$) - 3)
+        temp$ = LEFT$(temp$, strlen(temp$) - 1) + "." + RIGHT$(temp$, 1)
+        print "      Temperature: ";temp$;"\n"
+        
+        // Wind speed Calculation
+        tmpVal = StrHex2Bin(tmpStr$, 6)
+        tmpVal = tmpVal * 3874 + 23400
+        SPRINT #speed$, tmpVal
+        speed$ = LEFT$(speed$, strlen(speed$) - 3)
+        speed$ = LEFT$(speed$, strlen(speed$) - 1) + "." + RIGHT$(speed$, 1)
+        print "      Wind speed: ";speed$;"\n"
+        
+        // Wind Direction Calculation
+        tmpVal = StrHex2Bin(tmpStr$, 12)
+        tmpVal = tmpVal * 14117
+        SPRINT #direction$, tmpVal
+        direction$ = LEFT$(direction$, strlen(direction$) -4)
+        print "      Wind Direction: ";direction$;"\n"
+        
+        // Tx above three data over LoRa with confirmation request
+        // This is for when gateway is set to network server
+        tmpStr$ = "[ID: " + id$ + "] T: " + temp$ + ", S: " + speed$ + ",D: " + direction$
+        rc = LORAMACTxData(1, tmpStr$ , 1)
+	else 
+		print "No device found with ID ";urtSensorId$;"\n"
+    endif
 endfunc 0
 
 sub WelcomeMsg()
-	print "********************************************************\n"
-	print "Enter Sensor ID (4 digit) for Etesian anemometer.\n"
-	print "Then it will update infomation for Etesian's anemometer.\n"
-	print "********************************************************\n"
-	print "Sensor ID : "
+    print "********************************************************\n"
+    print "Enter Sensor ID (4 digit) for Etesian anemometer.\n"
+    print "Then it will update infomation for Etesian's anemometer.\n"
+    print "********************************************************\n"
+    print "Sensor ID : "
 endsub
 
 //******************************************************************************
@@ -216,9 +220,9 @@ endsub
 //==============================================================================
 function HandlerBlrScanTimOut() as integer
   // DbgMsg( "Scanning stopped via timeout\n" )
-	if arrIndex == 0 then 
-		print "no Etesian device is found\n"
-	endif
+    if arrIndex == 0 then 
+        print "No Etesian device found\n"
+    endif
 endfunc 1
 
 //==============================================================================
@@ -229,25 +233,25 @@ function HandlerAdvRpt() as integer
   
   rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)  
   while rc==0
-	// Check if device name is DEVICENAME ("Etesian") && check if the device was not scanned before
-	dName$ = GetDeviceName(dta$)
-	if strCmp(dName$, DEVICENAME) == 0 && InArray(ad$) == 1 then		
-		// If can array is all filled with Etesian devices, reset the array
-		if arrIndex >= SPACE_IN_SCAN_TABLE then
-			for arrIndex = 0 to SPACE_IN_SCAN_TABLE
-				DbgMsg ("\nReset the scan array")
-				scanTableMac[arrIndex] = ""
-			next
-			arrIndex = 0			
-		else 					
-			// rc = showAdvData(dta$)
-			rc = LoraTxData(dta$, dName$, ad$, rsi)
+    // Check if device name is DEVICENAME ("Etesian") && check if the device was not scanned before
+    dName$ = GetDeviceName(dta$)
+    if strCmp(dName$, DEVICENAME) == 0 && InArray(ad$) == 1 then        
+        // If can array is all filled with Etesian devices, reset the array
+        if arrIndex >= SPACE_IN_SCAN_TABLE then
+            for arrIndex = 0 to SPACE_IN_SCAN_TABLE
+                DbgMsg ("\nReset the scan array")
+                scanTableMac[arrIndex] = ""
+            next
+            arrIndex = 0            
+        else                    
+            // rc = showAdvData(dta$)
+            rc = LoraTxData(dta$, dName$, ad$, rsi)
 
-			// Add scanned device to scan array
-			scanTableMac[arrIndex] = strhexize$(ad$)
-			arrIndex = arrIndex + 1
-		endif		
-	endif 
+            // Add scanned device to scan array
+            scanTableMac[arrIndex] = strhexize$(ad$)
+            arrIndex = arrIndex + 1
+        endif       
+    endif 
     rc = BleScanGetAdvReport(ad$,dta$,ndisc,rsi)
   endwhile
 endfunc 1
@@ -256,15 +260,20 @@ endfunc 1
 // This handler is called when the LoRa Join procedure starts
 //==============================================================================
 function HandlerLoRaJoining() as integer
-	print "Attempting to join the LoRa network\n"
+    print "Attempting to join the LoRa network\n"
 endfunc 1
 
 //==============================================================================
 // This handler is called when the LoRa Join Process completes successfully
 //==============================================================================
 function HandlerLoRaJoined() as integer
-  print "Joined the LoRa network\n"
-  TimerStart(0, 5000, 1)
+    print "Joined the LoRa network\n"
+    // change data rate from DR0 to DR1 to increase max payload
+    dim temp$
+    temp$ ="4"
+    rc = LoraMacSetOption(LORAMAC_OPT_DATA_RATE, temp$)
+
+    TimerStart(0, 10000, 1)
 endfunc 1
 
 //==============================================================================
@@ -272,7 +281,7 @@ endfunc 1
 // This timer will trigger to scan (resulting in LoRa Tx)
 //==============================================================================
 function HandlerTimer0() as integer
-	rc = ResetScanTable()
+    rc = ResetScanTable()
     rc = BleScanStart(3000, 0)
 endfunc 1
 
@@ -280,26 +289,26 @@ endfunc 1
 // When Uart input is recieved for sensor ID
 //------------------------------------------------------------------------------
 function HandlerUartRxCmd() as integer
-	timerStart(1, 100, 0)
+    timerStart(1, 100, 0)
 endfunc 1
 
 //------------------------------------------------------------------------------
 // Process Sensor ID from user input
 //------------------------------------------------------------------------------
 function HandlerTimer1()
-	dim nMatch, idLen
-	//check if CR has been received
-	nMatch=UartReadMatch(stRsp$,13)	
-	
-	if nMatch == 5 then
-		//length of user input was 4 & CR exists in the input buffer
-		urtInput$ = StrSplitLeft$(stRsp$,nMatch)
-		idLen = ExtractStrToken(urtInput$, urtSensorId$) //get sensor id from user 
-		rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
-	else
-		print "Invalid format of ID! Run application again ";nMatch
-		exitfunc 0
-	endif
+    dim nMatch, idLen
+    //check if CR has been received
+    nMatch=UartReadMatch(stRsp$,13) 
+    
+    if nMatch == 5 then
+        //length of user input was 4 & CR exists in the input buffer
+        urtInput$ = StrSplitLeft$(stRsp$,nMatch)
+        idLen = ExtractStrToken(urtInput$, urtSensorId$) //get sensor id from user 
+        rc=LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
+    else
+        print "Invalid format of ID. Restart application. ";nMatch
+        exitfunc 0
+    endif
 endfunc 1
 
 //******************************************************************************
@@ -313,7 +322,7 @@ OnEvent  EVLORAMACJOINING         call HandlerLoRaJoining
 OnEvent  EVLORAMACJOINED          call HandlerLoRaJoined
 
 OnEvent  EVTMR0                   call HandlerTimer0
-OnEvent	 EVTMR1					  call HandlerTimer1
+OnEvent  EVTMR1                   call HandlerTimer1
 OnEvent  EVUARTRX                 call HandlerUartRxCmd
 
 // Welcome message (get Sensor ID from user here)
