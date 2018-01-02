@@ -10,6 +10,11 @@
 
 #define LORAMAC_JOIN_BY_REQUEST 	1
 #define LORAMAC_OPT_DATA_RATE 		2
+
+#define LORAMAC_JOIN_BY_PERSONALIZATION          0 // Used with LORAMACJoin
+
+#define NUM_OF_I_PARAMS                     (4)
+
 //******************************************************************************
 // Register Error Handler as early as possible
 //******************************************************************************
@@ -38,19 +43,57 @@ endsub
 //******************************************************************************
 // Global Variable Declarations
 //******************************************************************************
-
 dim rc
 dim scanTableMac[SPACE_IN_SCAN_TABLE] as string		// Table for scanned BLE devices Mac address (database)
 dim arrIndex as integer		// Index for scan array
+dim str$
+
+dim tkn$,tlen               //Used by command parser
+dim urtcmd$                 //Cmd line from uart
+dim i[NUM_OF_I_PARAMS]      //Index 0 used for return values
+dim ok$,er$,pr$             //String for OK, ERROR and carriage return
+dim urts                    //Will be <0 if uart parser suspended
+dim stRsp$ as string        //Uart rx data is stored here
 
 //******************************************************************************
 // Initialisse Global Variable
 //******************************************************************************
 arrIndex = 0
+ok$    = "\nOK"
+er$    = "\nERROR "
+pr$    = "\r\n>"
+
 
 //******************************************************************************
 // Function and Subroutine definitions
 //******************************************************************************
+
+//==============================================================================
+SUB PrintMsg(str$)
+    rc = UartWrite(str$)
+ENDSUB
+
+//==============================================================================
+sub UartRsp(rsp as integer)
+    if rsp == 0 then
+        print ok$;pr$
+    elseif rsp > 0 then 
+        print er$;integer.h' rsp;pr$
+    endif
+    urts = rsp
+endsub
+
+//==============================================================================
+function ExtractIntTokens(u$,stIdx,num)
+    while num>0
+        tlen = ExtractIntToken(u$,i[stIdx])
+        if tlen == 0 then
+            exitfunc 4
+        endif
+        num=num-1
+        stIdx = stIdx+1
+    endwhile
+endfunc 0
 
 //==============================================================================
 // Check to see via addr$ if device has been scanned
@@ -115,6 +158,13 @@ FUNCTION RemoveZeros(data$) AS STRING
 ENDFUNC tmpStr$
 
 //==============================================================================
+// This function swaps first 8 bits and seconds 8 bits for 16 bits data
+//==============================================================================
+sub EndianSwap(byref atm)
+    atm = (atm >> 8 & 0xFF) | (atm << 8 & 0xFF00)
+endsub
+
+//==============================================================================
 // Show Advert Data according to data type
 //==============================================================================
 function ShowAdvData(byval data$ as string) as integer
@@ -144,7 +194,7 @@ endfunc 0
 // Data consists of Company ID + Temperature + Wind Speed + Sendsor ID + Wind Direction
 // This function shows ID, Temperature, Wind Speed, Wind Direction
 //==============================================================================
-function LoraTxData(byval data$ as string) as integer
+function LoraTxASCII(byval data$ as string) as integer
 	dim tmpVal
 	// temperature, speed & direction for wind
 	dim tmpStr$, tmpStr2$, id$, temp$, speed$, direction$
@@ -190,6 +240,69 @@ function LoraTxData(byval data$ as string) as integer
 	// This is for when gateway is set to network server
 	tmpStr$ = "[ID: " + id$ + "] T: " + temp$ + ", S: " + speed$ + ",D: " + direction$
 	rc = LORAMACTxData(1, tmpStr$ , 1)
+endfunc 0
+
+//==============================================================================
+// Data consists of Company Temperature + Wind Speed + Sendsor ID + Wind Direction
+// This function shows ID, Temperature, Wind Speed, Wind Direction to UART
+// Data will be sent to Cayenne in hex format. 
+//==============================================================================
+function LoraTxCayenne(byval data$ as string) as integer
+	dim tmpVal
+	// temperature, speed & direction for wind
+	dim tmpStr$, tmpStr2$, id$, temp$, speed$, direction$
+	
+	// Cayenne data channel + format
+	dim idType$ : idType$="\01\02"		// sensor ID as "Analog Input"
+	dim tempType$ : tempType$="\02\67"	// temperature type as "Temperature Sensor"
+	dim speedType$ : speedType$="\03\02"	// wind speed type as "Analog Input"
+	dim dirType$ : dirType$="\04\02"	// wind direction type as "Analog Input"
+	
+	// Display manufacturer specific data
+	rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
+	tmpStr$ = STRHEXIZE$(tmpStr$)
+	
+	// Sensor_ID - reserved for channel 01 until Cayenne accepts integer type of data 
+	tmpVal = StrHex2Bin(tmpStr$, 8)
+	SPRINT #id$, integer.h' tmpVal
+	tmpVal = StrHex2Bin(tmpStr$, 10)
+	SPRINT #tmpStr2$, integer.h' tmpVal	
+	id$ = RemoveZeros(id$) + RemoveZeros(tmpStr2$)
+	print "  Sensor ID : ";id$;"\n"
+	
+	// ***Data Conversion (10^4 scale)***
+	// Temperature Calculation in Celsius combines a few calculation  
+	// 	tmpVal = (tmpVal * 0.847058 - 58) * 10^4 / 10^4 to get temperature in F
+	//	tmpVal = (tmpVal -32) * 10 / 18 to get temperature in C
+	tmpVal = StrHex2Bin(tmpStr$, 4) 
+	tmpVal = (tmpVal * 4706 - 500000)/1000 	// divided by 10^3 instead of 10^4 for decimal point
+	SPRINT #tmpStr2$, tmpVal
+	print "     Temperature: ";LEFT$(tmpStr2$, strlen(tmpStr2$)-1);".";RIGHT$(tmpStr2$,1);"\n"
+	EndianSwap(tmpVal)
+	rc = bleencode16(temp$, tmpVal,0)
+	
+	// Wind speed Calculation
+	// tmpVal = (tmpVal * 0.3874 +2.34) * 10^4 / 10^4 
+	tmpVal = StrHex2Bin(tmpStr$, 6)
+	tmpVal = (tmpVal * 3874 + 23400)/100
+	SPRINT #tmpStr2$, tmpVal
+	print "     Wind speed: ";LEFT$(tmpStr2$, strlen(tmpStr2$) - 2) + "." + RIGHT$(tmpStr2$, 2);"\n"
+	EndianSwap(tmpVal)
+	rc = bleencode16(speed$, tmpVal,0)
+	
+	// Wind Direction Calculation
+	// tmpVal = (D * 1.4117647) * 10^4 / 10^4
+	tmpVal = StrHex2Bin(tmpStr$, 12)
+	tmpVal = (tmpVal * 14117)/100
+	SPRINT #tmpStr2$, tmpVal
+	print "     Wind Direction: ";LEFT$(tmpStr2$, strlen(tmpStr2$) - 2) + "." + RIGHT$(tmpStr2$, 2);"\n"
+	EndianSwap(tmpVal)
+	rc = bleencode16(direction$, tmpVal,0)
+
+	// Tx above three data over LoRa with confirmation request
+	tmpStr$ = tempType$ + temp$ + speedType$ + speed$ + dirType$ + direction$
+	rc = LORAMACTxData(1, tmpStr$ , 1)
+	
 endfunc 0
 
 //==============================================================================
@@ -243,9 +356,96 @@ sub WelcomeMsg()
 	print "********************************************************\n\n"
 endsub
 
+//==============================================================================
+//#CMD#// lora join  
+//#CMD#// lora activate 
+//#CMD#// lora send  #STRdata#  #INTport#  #INTconfirm# 
+//#CMD#// lora post 
+//#CMD#// lora get  #INToptID#
+//#CMD#// lora set #INToptID#  #INToptVal# 
+//#CMD#// lora debug  #INTdebug#  #INTtxSio# #INTrxSio#
+//==============================================================================
+function _Lora()
+    dim prAdr$ 
+    dim val
+    dim res
+    dim reg
+    dim stringVal$
+    tlen = ExtractStrToken(urtcmd$,tkn$)
+    if tlen == 0 then
+        exitfunc 5
+    elseif strcmp(tkn$,"join")==0 then
+        exitfunc LORAMACJoin(LORAMAC_JOIN_BY_REQUEST)
+    elseif strcmp(tkn$, "activate")==0 then
+        exitfunc LORAMACJoin(LORAMAC_JOIN_BY_PERSONALIZATION)
+    elseif strcmp(tkn$,"send")==0 then
+        // #>lora send <data> <port> <confirm>
+        rc = ExtractStrToken(urtcmd$, tkn$)
+        rc = ExtractIntTokens(urtcmd$,1,2)
+        exitfunc LORAMACTxData(i[1], tkn$, i[2])     
+    elseif strcmp(tkn$,"get")==0 then
+        rc = ExtractIntToken(urtcmd$,reg)
+        rc = LORAMACGetOption(reg, stringVal$)
+        print stringVal$
+        exitfunc rc
+    elseif strcmp(tkn$,"set")==0 then
+        rc = ExtractIntToken(urtcmd$,reg)
+        rc = ExtractStrToken(urtcmd$,stringVal$)
+        rc = LORAMACSetOption(reg, stringVal$)
+        exitfunc rc
+    elseif strcmp(tkn$,"debug")==0 then
+        rc = ExtractIntTokens(urtcmd$,0,3)
+        if rc == 0 then
+            rc = LORAMACSetDebug(i[0],i[1],i[2])
+        endif
+        exitfunc rc
+    endif
+endfunc 5
+
 //******************************************************************************
 // Handler definitions
 //******************************************************************************
+function OnUartCmd() as integer
+    dim inputVoltage_mV
+    rc=1 //Assume there is an error
+    tlen = ExtractStrToken(urtcmd$,tkn$) //Get first token
+    if tlen == 0 then
+        rc=0
+    elseif tlen > 0 then
+        if strcmp(tkn$,"lora") == 0 then
+            rc = _Lora()
+        elseif strcmp(tkn$,"volts") == 0 then
+            inputVoltage_mV = ReadPwrSupplyMv()
+            print "Input voltage = ";inputVoltage_mV;"mV\n"
+            rc=0
+        elseif strcmp(tkn$,"exit") == 0 then
+            rc=0
+            exitfunc 0
+        endif
+    endif
+    //Send a response back to the user
+    UartRsp(rc)
+endfunc 1
+
+//==============================================================================
+// This handler is called when data has arrived at the serial port
+//==============================================================================
+function HandlerUartRxCmd() as integer
+    dim nMatch
+    if urts < 0 then
+        //Uart parser is suspended
+        exitfunc 1
+    endif
+
+    //Check if CR has been received
+    nMatch=UartReadMatch(stRsp$,13)
+    if nMatch!=0 then
+        //CR exists in the input buffer
+        urtcmd$ = strsplitleft$(stRsp$,nMatch)
+        exitfunc OnUartCmd()
+    endif
+endfunc 1
+
 
 //==============================================================================
 // This handler is called when there is a scan attempt timeout
@@ -279,7 +479,8 @@ function HandlerAdvRpt() as integer
 			//Show advert data
 			print "\n";dName$;" (";strhexize$(ad$);")	RSSI: ";rsi;"\n"
 			// rc = showAdvData(dta$)
-			rc = LoraTxData(dta$)
+			// rc = LoraTxASCII(dta$)
+			rc = LoraTxCayenne(dta$)
 			// rc = LoRaTxToSemtech(dta$)
 
 			// Add scanned device to scan array
@@ -308,7 +509,7 @@ function HandlerLoRaJoined() as integer
   temp$ ="4"
   rc = LoraMacSetOption(LORAMAC_OPT_DATA_RATE, temp$) 
   
-  TimerStart(0, 60000, 1)
+  TimerStart(0, 20000, 1)
 endfunc 1
 
 //==============================================================================
@@ -334,16 +535,34 @@ FUNCTION HandlerNoSync() As Integer
 	print "NoSync\n"
 endfunc 1
 	
-'//==============================================================================
-'// This handler is called when there is a LoRa TX Complete event
-'//==============================================================================
+//==============================================================================
+// This handler is called when there is a LoRa TX Complete event
+//==============================================================================
 function HandlerLoRaTxComp() as integer
 	print "LoRa TX Complete Event\n"
+endfunc 1
+
+//==============================================================================
+// This handler is called when there is a LoRa Tx Timeout event 
+//==============================================================================
+function HandlerLoRaTxTimeout() as integer
+    str$ = "\nLoRa TX Timeout"
+    PrintMsg(str$)
+endfunc 1
+
+
+//==============================================================================
+// This handler is called when there is a LoRa Rx Timeout event
+//==============================================================================
+function HandlerLoRaRxTimeout() as integer
+    str$ = "\nLoRa RX Timeout"
+    PrintMsg(str$)
 endfunc 1
 	
 //******************************************************************************
 // Equivalent to main() in C
 //******************************************************************************
+OnEvent  EVUARTRX             call  HandlerUartRxCmd
 
 OnEvent  EVBLE_SCAN_TIMEOUT       call HandlerBlrScanTimOut
 OnEvent  EVBLE_ADV_REPORT         call HandlerAdvRpt
@@ -353,6 +572,8 @@ OnEvent  EVLORAMACJOINED          call HandlerLoRaJoined
 OnEvent  EVLORAMACTXDONE 		  call HandlerTxDone
 ONEVENT  EVLORAMACNOSYNC 		  CALL HandlerNoSync
 OnEvent  EVLORAMACTXCOMPLETE      call HandlerLoRaTxComp
+OnEvent  EVLORAMACTXTIMEOUT   call  HandlerLoRaTxTimeout
+OnEvent  EVLORAMACRXTIMEOUT   call  HandlerLoRaRxTimeout
 
 OnEvent  EVTMR0                   call HandlerTimer0
 

@@ -1,9 +1,19 @@
 dim a, b, c, tmp
 
-tmp=2675
-a = tmp/1024
-b = tmp>>10
-c = tmp<<10
-print a;"\n"
-print b;"\n"
-print c;"\n"
+tmp=9939
+// a = tmp>>1
+// b = tmp>>10
+// c = tmp>>9
+// print a;"\n"
+// print b;"\n"
+// print c;"\n"
+print tmp>>1;"\n"
+print tmp>>2;"\n"
+print tmp>>3;"\n"
+print tmp>>4;"\n"
+print tmp>>5;"\n"
+print tmp>>6;"\n"
+print tmp>>7;"\n"
+print tmp>>8;"\n"
+print tmp>>9;"\n"
+print tmp>>10;"\n"
