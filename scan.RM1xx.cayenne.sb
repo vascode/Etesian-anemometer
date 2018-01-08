@@ -66,6 +66,9 @@ dim ok$,er$,pr$             //String for OK, ERROR and carriage return
 dim urts                    //Will be <0 if uart parser suspended
 dim stRsp$ as string        //Uart rx data is stored here
 
+dim okToTx : okToTx = 1     //Available duty cycle on one of sub-band (only matters in EU & AS)
+                            //Change to 0 at data Tx and 1 at EVLORAMACNEXTTX   
+
 //******************************************************************************
 // Initialisse Global Variable
 //******************************************************************************
@@ -569,6 +572,13 @@ function HandlerLoRaRxTimeout() as integer
     str$ = "\nLoRa RX Timeout"
     PrintMsg(str$)
 endfunc 1
+
+//==============================================================================
+// This handler is called when there is availale duty cycle on one of sub-band to send data  
+//==============================================================================
+FUNCTION HandlerNextTx() As Integer
+    okToTx = 1
+endfunc 1
 	
 //******************************************************************************
 // Equivalent to main() in C
@@ -585,6 +595,7 @@ ONEVENT  EVLORAMACNOSYNC 		  CALL HandlerNoSync
 OnEvent  EVLORAMACTXCOMPLETE      call HandlerLoRaTxComp
 OnEvent  EVLORAMACTXTIMEOUT   call  HandlerLoRaTxTimeout
 OnEvent  EVLORAMACRXTIMEOUT   call  HandlerLoRaRxTimeout
+OnEvent  EVLORAMACNEXTTX      call HandlerNextTx
 
 OnEvent  EVTMR0                   call HandlerTimer0
 
