@@ -15,6 +15,17 @@
 
 #define NUM_OF_I_PARAMS                     (4)
 
+
+//******************************************************************************
+// Check Error code
+//******************************************************************************
+
+sub AssertRC(rc, line)
+    if(rc!=0)then
+        print "Failed with ";integer.h' rc;" on line ";line;"\n"
+    endif
+endsub
+
 //******************************************************************************
 // Register Error Handler as early as possible
 //******************************************************************************
@@ -302,7 +313,7 @@ function LoraTxCayenne(byval data$ as string) as integer
 	// Tx above three data over LoRa with confirmation request
 	tmpStr$ = tempType$ + temp$ + speedType$ + speed$ + dirType$ + direction$
 	rc = LORAMACTxData(1, tmpStr$ , 1)
-	
+AssertRC(rc, 1)
 endfunc 0
 
 //==============================================================================
