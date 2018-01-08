@@ -262,61 +262,89 @@ endfunc 0
 // Data will be sent to Cayenne in hex format. 
 //==============================================================================
 function LoraTxCayenne(byval data$ as string) as integer
-	dim tmpVal
-	// temperature, speed & direction for wind
-	dim tmpStr$, tmpStr2$, id$, temp$, speed$, direction$
-	
-	// Cayenne data channel + format
-	dim idType$ : idType$="\01\02"		// sensor ID as "Analog Input"
-	dim tempType$ : tempType$="\02\67"	// temperature type as "Temperature Sensor"
-	dim speedType$ : speedType$="\03\02"	// wind speed type as "Analog Input"
-	dim dirType$ : dirType$="\04\02"	// wind direction type as "Analog Input"
-	
-	// Display manufacturer specific data
-	rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
-	tmpStr$ = STRHEXIZE$(tmpStr$)
-	
-	// Sensor_ID - reserved for channel 01 until Cayenne accepts integer type of data 
-	tmpVal = StrHex2Bin(tmpStr$, 8)
-	SPRINT #id$, integer.h' tmpVal
-	tmpVal = StrHex2Bin(tmpStr$, 10)
-	SPRINT #tmpStr2$, integer.h' tmpVal	
-	id$ = RemoveZeros(id$) + RemoveZeros(tmpStr2$)
-	print "  Sensor ID : ";id$;"\n"
-	
-	// ***Data Conversion (10^4 scale)***
-	// Temperature Calculation in Celsius combines a few calculation  
-	// 	tmpVal = (tmpVal * 0.847058 - 58) * 10^4 / 10^4 to get temperature in F
-	//	tmpVal = (tmpVal -32) * 10 / 18 to get temperature in C
-	tmpVal = StrHex2Bin(tmpStr$, 4) 
-	tmpVal = (tmpVal * 4706 - 500000)/1000 	// divided by 10^3 instead of 10^4 for decimal point
-	SPRINT #tmpStr2$, tmpVal
-	print "     Temperature: ";LEFT$(tmpStr2$, strlen(tmpStr2$)-1);".";RIGHT$(tmpStr2$,1);"\n"
-	EndianSwap(tmpVal)
-	rc = bleencode16(temp$, tmpVal,0)
-	
-	// Wind speed Calculation
-	// tmpVal = (tmpVal * 0.3874 +2.34) * 10^4 / 10^4 
-	tmpVal = StrHex2Bin(tmpStr$, 6)
-	tmpVal = (tmpVal * 3874 + 23400)/100
-	SPRINT #tmpStr2$, tmpVal
-	print "     Wind speed: ";LEFT$(tmpStr2$, strlen(tmpStr2$) - 2) + "." + RIGHT$(tmpStr2$, 2);"\n"
-	EndianSwap(tmpVal)
-	rc = bleencode16(speed$, tmpVal,0)
-	
-	// Wind Direction Calculation
-	// tmpVal = (D * 1.4117647) * 10^4 / 10^4
-	tmpVal = StrHex2Bin(tmpStr$, 12)
-	tmpVal = (tmpVal * 14117)/100
-	SPRINT #tmpStr2$, tmpVal
-	print "     Wind Direction: ";LEFT$(tmpStr2$, strlen(tmpStr2$) - 2) + "." + RIGHT$(tmpStr2$, 2);"\n"
-	EndianSwap(tmpVal)
-	rc = bleencode16(direction$, tmpVal,0)
+	if (okToTx == 1) then 
 
-	// Tx above three data over LoRa with confirmation request
-	tmpStr$ = tempType$ + temp$ + speedType$ + speed$ + dirType$ + direction$
-	rc = LORAMACTxData(1, tmpStr$ , 1)
+		dim tmpVal
+		// temperature, speed & direction for wind
+		dim tmpStr$, tmpStr2$, id$, temp$, speed$, direction$
+		dim theoreticalMax, actualMax
+		
+		// Cayenne data channel + format
+		dim idType$ : idType$="\01\02"		// sensor ID as "Analog Input"
+		dim tempType$ : tempType$="\02\67"	// temperature type as "Temperature Sensor"
+		dim speedType$ : speedType$="\03\02"	// wind speed type as "Analog Input"
+		dim dirType$ : dirType$="\04\02"	// wind direction type as "Analog Input"
+		
+		// Display manufacturer specific data
+		rc = BLEGETADBYTAG(data$, 0xff, tmpStr$)	
+		tmpStr$ = STRHEXIZE$(tmpStr$)
+		
+		// Sensor_ID - reserved for channel 01 until Cayenne accepts integer type of data 
+		tmpVal = StrHex2Bin(tmpStr$, 8)
+		SPRINT #id$, integer.h' tmpVal
+		tmpVal = StrHex2Bin(tmpStr$, 10)
+		SPRINT #tmpStr2$, integer.h' tmpVal	
+		id$ = RemoveZeros(id$) + RemoveZeros(tmpStr2$)
+		print "  Sensor ID : ";id$;"\n"
+		
+		// ***Data Conversion (10^4 scale)***
+		// Temperature Calculation in Celsius combines a few calculation  
+		// 	tmpVal = (tmpVal * 0.847058 - 58) * 10^4 / 10^4 to get temperature in F
+		//	tmpVal = (tmpVal -32) * 10 / 18 to get temperature in C
+		tmpVal = StrHex2Bin(tmpStr$, 4) 
+		tmpVal = (tmpVal * 4706 - 500000)/1000 	// divided by 10^3 instead of 10^4 for decimal point
+		SPRINT #tmpStr2$, tmpVal
+		print "     Temperature: ";LEFT$(tmpStr2$, strlen(tmpStr2$)-1);".";RIGHT$(tmpStr2$,1);"\n"
+		EndianSwap(tmpVal)
+		rc = bleencode16(temp$, tmpVal,0)
+		
+		// Wind speed Calculation
+		// tmpVal = (tmpVal * 0.3874 +2.34) * 10^4 / 10^4 
+		tmpVal = StrHex2Bin(tmpStr$, 6)
+		tmpVal = (tmpVal * 3874 + 23400)/100
+		SPRINT #tmpStr2$, tmpVal
+		print "     Wind speed: ";LEFT$(tmpStr2$, strlen(tmpStr2$) - 2) + "." + RIGHT$(tmpStr2$, 2);"\n"
+		EndianSwap(tmpVal)
+		rc = bleencode16(speed$, tmpVal,0)
+		
+		// Wind Direction Calculation
+		// tmpVal = (D * 1.4117647) * 10^4 / 10^4
+		tmpVal = StrHex2Bin(tmpStr$, 12)
+		tmpVal = (tmpVal * 14117)/100
+		SPRINT #tmpStr2$, tmpVal
+		print "     Wind Direction: ";LEFT$(tmpStr2$, strlen(tmpStr2$) - 2) + "." + RIGHT$(tmpStr2$, 2);"\n"
+		EndianSwap(tmpVal)
+		rc = bleencode16(direction$, tmpVal,0)
+
+		// Tx above three data over LoRa with confirmation request
+		tmpStr$ = tempType$ + temp$ + speedType$ + speed$ + dirType$ + direction$
+		
+		//Check the size of data is within maximum payload size 
+        rc = LoramacQueryTxPossible(strlen(tmpStr$), theoreticalMax, actualMax)
+        if (rc == 0) then
+            //Current data rate can handle the outbound data size 
+			rc = LORAMACTxData(1, tmpStr$ , 1)
 AssertRC(rc, 1)
+        else
+            print "\nData payload is too large for current data rate"
+            print "\n   Theoretical max payload at current data rate : ";theoreticalMax;
+            print "\n   Actual max payload at current data rate: ";actualMax;
+            print "\n   Size of data currently attempting to transmit: ";strlen(tmpStr$)
+            
+            //Increase data rate by one
+            rc = LORAMACGetOption(LORAMAC_OPT_DATA_RATE, str$)
+            dim dr : dr = StrValDec(str$)
+            if (dr <= 4) then
+                dr = dr + 1
+                sprint #str$, dr
+                print "\nRaising data rate to DR";dr;" for higher max payload\n"            
+            endif
+            rc = LORAMACSetOption(LORAMAC_OPT_DATA_RATE, str$)
+        endif
+	else
+		str$ = "\nThere is no available duty cycle"
+        PrintMsg(str$)
+	endif
 endfunc 0
 
 //==============================================================================
